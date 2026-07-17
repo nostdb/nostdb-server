@@ -2,6 +2,8 @@
 
 Source-available single-node HTTP server for NostosDB, licensed under SSPL-1.0.
 
+Public-preview source only: no supported binary, hosted service, TLS endpoint, production SLA, or external contribution intake exists. Read [PREVIEW.md](PREVIEW.md), [SECURITY.md](SECURITY.md), and [CLA status](CLA.md).
+
 The server treats `.ndb` as authoritative and consumes only the public `nostos-engine` facade. It provides API-key authentication, JSON and JSONL query results, queued session transactions, cooperative time/row/memory/operation/traversal limits, health and Prometheus-style metrics, structured tracing, and separate logical `.nostos` package and snapshot `.ndb` import/export endpoints.
 
 ## Run

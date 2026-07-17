@@ -1,7 +1,5 @@
-# Contributor license agreement
+# Contributor license agreement status
 
-> Legal-review placeholder — this is not a contributor license agreement.
+No CLA has been adopted and external contributions are closed. No patch, pull request, DCO sign-off, or issue comment is an accepted contribution grant.
 
-NostosDB has not adopted final CLA terms and is not accepting external contributions. The copyright holder, contribution grant, distribution rights, and commercial-relicensing rights must be approved by legal counsel before a CLA process opens.
-
-Do not treat a contribution, pull request, or sign-off as acceptance of terms that do not yet exist.
+Legal counsel must approve the receiving entity and SSPL/commercial-relicensing contribution terms before intake opens. This file is not a contract.

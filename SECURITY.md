@@ -1,7 +1,7 @@
 # Security policy for nostos-server
 
-> Stage 0 placeholder: the private vulnerability-reporting process will be finalized before public preview in Stage 12.
+There is no supported Server release or production security SLA. Current `main` is single-node evaluation software.
 
-Do not disclose suspected vulnerabilities in a public issue. Until a private reporting channel is published, coordinate privately with the repository owner without including secrets or exploit details in public systems.
+Privately report authentication bypass, request smuggling/parsing, resource-limit escape, transaction isolation/timeout, snapshot or logical-import validation, path handling, credential logging, or sensitive metrics issues through **Security → Report a vulnerability** after private reporting is enabled. If absent, request enablement publicly without details and wait. Use synthetic requests/data and redact keys.
 
-No supported release exists yet, and no security-response service-level agreement is offered.
+Maintainers target acknowledgement in three business days and triage in seven, without an SLA or bounty. Deploy evaluation instances on loopback or behind independently configured TLS/auth controls.

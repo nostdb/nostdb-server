@@ -1,7 +1,3 @@
-# Code of Conduct
+# Code of Conduct status
 
-> Stage 0 placeholder: a final community code of conduct and enforcement process have not yet been adopted.
-
-Be respectful, constructive, and considerate in all project interactions. Do not harass, threaten, discriminate against, or expose private information about others.
-
-A confidential reporting channel, enforcement responsibilities, and appeal process will be established before external contributions are accepted.
+External contribution forums are not yet operated. Harassment, threats, discrimination, doxxing, and disclosure of private information are unacceptable. Governance must establish a confidential channel, enforcement, conflicts, appeals, and retention before intake. Vulnerabilities use [SECURITY.md](SECURITY.md).
