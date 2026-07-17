@@ -165,6 +165,81 @@ async fn queries_support_json_parameters_and_jsonl_streaming() {
 }
 
 #[tokio::test]
+async fn read_only_queries_and_catalog_endpoints_are_enforced_and_bounded() {
+    let server = TestServer::new("mcp-read-only", |config| {
+        config.query_limits.max_rows = 1;
+    });
+    let rejected = server
+        .request(
+            "POST",
+            "/v1/query",
+            Body::from(
+                serde_json::to_vec(&json!({
+                    "query": "CREATE (n {name: 'Forbidden'})",
+                    "read_only": true,
+                }))
+                .expect("request serializes"),
+            ),
+        )
+        .await;
+    assert_eq!(rejected.status, StatusCode::BAD_REQUEST);
+    assert_eq!(rejected.json()["error"]["code"], "query_error");
+
+    let count = server
+        .request(
+            "POST",
+            "/v1/query",
+            Body::from(
+                serde_json::to_vec(&json!({
+                    "query": "MATCH (n) RETURN count(n) AS count",
+                    "read_only": true,
+                }))
+                .expect("request serializes"),
+            ),
+        )
+        .await;
+    assert_eq!(count.status, StatusCode::OK);
+    assert_eq!(result_rows(&count.json()), &[json!([0])]);
+
+    let catalog = server.request("GET", "/v1/catalog", Body::empty()).await;
+    assert_eq!(catalog.status, StatusCode::OK);
+    assert_eq!(catalog.json()["protocol_version"], 1);
+    assert_eq!(catalog.json()["counts"]["nodes"], 0);
+    assert_eq!(
+        catalog.json()["database"]["logical_checksum"]
+            .as_str()
+            .expect("checksum is text")
+            .len(),
+        16
+    );
+
+    let schema = server
+        .request("GET", "/v1/schema?limit=999", Body::empty())
+        .await;
+    assert_eq!(schema.status, StatusCode::OK);
+    assert_eq!(schema.json()["returned"], 0);
+    assert_eq!(schema.json()["truncated"], false);
+
+    let unresolved = server
+        .request("GET", "/v1/unresolved?limit=999", Body::empty())
+        .await;
+    assert_eq!(unresolved.status, StatusCode::OK);
+    assert_eq!(unresolved.json()["returned"], 0);
+    assert_eq!(unresolved.json()["truncated"], false);
+
+    let invalid = server
+        .request("GET", "/v1/schema?limit=-1", Body::empty())
+        .await;
+    assert_eq!(invalid.status, StatusCode::BAD_REQUEST);
+    assert_eq!(invalid.json()["error"]["code"], "bad_request");
+
+    for path in ["/v1/catalog", "/v1/schema", "/v1/unresolved"] {
+        let response = request(server.app.clone(), "GET", path, Body::empty(), false).await;
+        assert_eq!(response.status, StatusCode::UNAUTHORIZED, "{path}");
+    }
+}
+
+#[tokio::test]
 async fn transaction_commit_is_atomic_for_concurrent_clients() {
     let server = TestServer::new("transaction", |_| {});
     let created = server.request("POST", "/v1/sessions", Body::empty()).await;
@@ -424,6 +499,23 @@ async fn snapshot_restore_validates_compatibility_before_replacing_live_database
     assert_eq!(logical.status, StatusCode::OK);
     let package = logical.json();
     assert_eq!(package["package_version"], 1);
+    assert_eq!(package["language_version"], 1);
+    assert!(package["modules"][0].get("stable_module_id").is_some());
+    assert!(package["modules"][0].get("module_id").is_none());
+    let mut unsupported_language = package.clone();
+    unsupported_language["language_version"] = json!(2);
+    let unsupported = server
+        .request(
+            "PUT",
+            "/v1/admin/logical",
+            serde_json::to_vec(&unsupported_language).expect("logical package serializes"),
+        )
+        .await;
+    assert_eq!(unsupported.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        unsupported.json()["error"]["code"],
+        "unsupported_logical_package"
+    );
     assert_eq!(
         package["modules"].as_array().expect("modules exist").len(),
         1

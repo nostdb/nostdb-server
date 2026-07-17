@@ -22,6 +22,7 @@ The complete request, response, session, limit, and import/export contract is in
 | Method and path | Behavior |
 |---|---|
 | `POST /v1/query` | Execute a bounded statement; `stream: true` returns JSONL |
+| `GET /v1/catalog`, `/v1/schema`, `/v1/unresolved` | Read bounded catalog metadata |
 | `POST /v1/sessions` | Create a session |
 | `POST /v1/sessions/{id}/begin` | Begin a queued atomic transaction |
 | `POST /v1/sessions/{id}/query` | Execute immediately or queue in the active transaction |
@@ -37,7 +38,7 @@ Example query:
 curl -sS http://127.0.0.1:7878/v1/query \
   -H 'Authorization: Bearer replace-me' \
   -H 'Content-Type: application/json' \
-  --data '{"query":"MATCH (n) RETURN n","stream":true}'
+  --data '{"query":"MATCH (n) RETURN n","stream":true,"read_only":true}'
 ```
 
 Snapshot restore opens and integrity-checks the uploaded Format 0 artifact before taking the live database lock or replacing the current file. Logical import uses a versioned package containing `nostos.toml` plus normalized module paths and converts the synchronized candidate to Server/NDB authority explicitly.

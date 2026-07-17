@@ -7,7 +7,8 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use axum::body::{Body, Bytes};
-use axum::extract::{Path, Request, State};
+use axum::extract::rejection::QueryRejection;
+use axum::extract::{Path, Query, Request, State};
 use axum::http::{HeaderValue, StatusCode, header};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
@@ -38,6 +39,9 @@ pub(crate) fn protected_routes(
     Router::new()
         .route("/metrics", get(metrics))
         .route("/v1/query", post(query).layer(request_limit))
+        .route("/v1/catalog", get(catalog))
+        .route("/v1/schema", get(schema))
+        .route("/v1/unresolved", get(unresolved))
         .route("/v1/sessions", post(create_session))
         .route("/v1/sessions/{id}", delete(delete_session))
         .route("/v1/sessions/{id}/begin", post(begin))
@@ -114,6 +118,8 @@ struct QueryRequest {
     parameters: BTreeMap<String, Value>,
     #[serde(default)]
     stream: bool,
+    #[serde(default)]
+    read_only: bool,
     limits: Option<RequestLimits>,
 }
 
@@ -160,6 +166,7 @@ impl RequestLimits {
 
 async fn query(State(state): State<AppState>, body: Bytes) -> Result<Response, ApiError> {
     let request = parse_query(&state, &body)?;
+    require_read_only(&request)?;
     let parameters = wire::parameters(request.parameters).map_err(ApiError::bad_request)?;
     let (limits, timeout) = request.limits.map_or(
         Ok((state.config.query_limits, state.config.query_timeout)),
@@ -167,6 +174,153 @@ async fn query(State(state): State<AppState>, body: Bytes) -> Result<Response, A
     )?;
     let result = execute_one(&state, request.query, parameters, limits, timeout).await?;
     response(result, request.stream)
+}
+
+fn require_read_only(request: &QueryRequest) -> Result<(), ApiError> {
+    if request.read_only {
+        prepare(&request.query).map_err(|error| {
+            ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "query_error",
+                format!("read-only query required: {error}"),
+            )
+        })?;
+    }
+    Ok(())
+}
+
+#[derive(Deserialize)]
+struct ListRequest {
+    limit: Option<u64>,
+}
+
+impl ListRequest {
+    fn effective_limit(&self, state: &AppState) -> usize {
+        let requested = self.limit.unwrap_or(state.config.query_limits.max_rows);
+        usize::try_from(requested.min(state.config.query_limits.max_rows)).unwrap_or(usize::MAX)
+    }
+}
+
+async fn catalog(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
+    let database = state.database.clone();
+    let value = tokio::task::spawn_blocking(move || {
+        let guard = database
+            .lock()
+            .map_err(|_| "database lock is poisoned".to_owned())?;
+        let database = guard
+            .as_ref()
+            .ok_or_else(|| "database is temporarily unavailable".to_owned())?;
+        let info = database.info().map_err(|error| error.to_string())?;
+        let counts = database.counts().map_err(|error| error.to_string())?;
+        Ok::<_, String>(json!({
+            "protocol_version": SERVER_PROTOCOL_VERSION,
+            "database": {
+                "ndb_format_version": info.ndb_format_version,
+                "schema_revision": info.schema_revision,
+                "value_codec_version": info.value_codec_version,
+                "checksum_codec_version": info.checksum_codec_version,
+                "generation": info.generation,
+                "logical_checksum": format!("{:016x}", info.logical_checksum),
+                "source_managed": info.source_managed,
+            },
+            "counts": {
+                "schemas": counts.schemas,
+                "nodes": counts.nodes,
+                "edges": counts.edges,
+                "adjacency": counts.adjacency,
+                "properties": counts.properties,
+            },
+        }))
+    })
+    .await
+    .map_err(|error| ApiError::internal(error.to_string()))?
+    .map_err(ApiError::internal)?;
+    Ok(Json(value))
+}
+
+async fn schema(
+    State(state): State<AppState>,
+    request: Result<Query<ListRequest>, QueryRejection>,
+) -> Result<Json<Value>, ApiError> {
+    let Query(request) = request.map_err(|error| ApiError::bad_request(error.to_string()))?;
+    let limit = request.effective_limit(&state);
+    let database = state.database.clone();
+    let value = tokio::task::spawn_blocking(move || {
+        let guard = database
+            .lock()
+            .map_err(|_| "database lock is poisoned".to_owned())?;
+        let database = guard
+            .as_ref()
+            .ok_or_else(|| "database is temporarily unavailable".to_owned())?;
+        let mut schemas = database.schemas().map_err(|error| error.to_string())?;
+        let truncated = schemas.len() > limit;
+        schemas.truncate(limit);
+        let schemas = schemas
+            .into_iter()
+            .map(|schema| {
+                json!({
+                    "identity": schema.identity,
+                    "state": schema.state,
+                    "properties": schema.properties.into_iter().map(|property| json!({
+                        "name": property.name,
+                        "type": property.property_type,
+                    })).collect::<Vec<_>>(),
+                    "constraints": schema.constraints,
+                })
+            })
+            .collect::<Vec<_>>();
+        let returned = schemas.len();
+        Ok::<_, String>(json!({
+            "schemas": schemas,
+            "returned": returned,
+            "truncated": truncated,
+        }))
+    })
+    .await
+    .map_err(|error| ApiError::internal(error.to_string()))?
+    .map_err(ApiError::internal)?;
+    Ok(Json(value))
+}
+
+async fn unresolved(
+    State(state): State<AppState>,
+    request: Result<Query<ListRequest>, QueryRejection>,
+) -> Result<Json<Value>, ApiError> {
+    let Query(request) = request.map_err(|error| ApiError::bad_request(error.to_string()))?;
+    let limit = request.effective_limit(&state);
+    let database = state.database.clone();
+    let value = tokio::task::spawn_blocking(move || {
+        let guard = database
+            .lock()
+            .map_err(|_| "database lock is poisoned".to_owned())?;
+        let database = guard
+            .as_ref()
+            .ok_or_else(|| "database is temporarily unavailable".to_owned())?;
+        let mut entries = database.unresolved().map_err(|error| error.to_string())?;
+        let truncated = entries.len() > limit;
+        entries.truncate(limit);
+        let entries = entries
+            .into_iter()
+            .map(|entry| {
+                json!({
+                    "kind": entry.kind,
+                    "internal_id": entry.internal_id,
+                    "identity": entry.identity,
+                    "state": entry.state,
+                })
+            })
+            .collect::<Vec<_>>();
+        let returned = entries.len();
+        Ok::<_, String>(json!({
+            "entries": entries,
+            "returned": returned,
+            "truncated": truncated,
+        }))
+    })
+    .await
+    .map_err(|error| ApiError::internal(error.to_string()))?
+    .map_err(ApiError::internal)?;
+    Ok(Json(value))
 }
 
 fn parse_query(state: &AppState, body: &[u8]) -> Result<QueryRequest, ApiError> {
@@ -423,6 +577,7 @@ async fn session_query(
     body: Bytes,
 ) -> Result<Response, ApiError> {
     let request = parse_query(&state, &body)?;
+    require_read_only(&request)?;
     let parameters = wire::parameters(request.parameters).map_err(ApiError::bad_request)?;
     let mut sessions = state.sessions.lock().await;
     let session = sessions.get_mut(&id).ok_or_else(session_not_found)?;
@@ -636,6 +791,7 @@ fn snapshot_incompatible(error: impl std::fmt::Display) -> ApiError {
 #[derive(Serialize, Deserialize)]
 struct LogicalPackageBody {
     package_version: u32,
+    language_version: u32,
     config: String,
     modules: Vec<LogicalModuleBody>,
 }
@@ -643,7 +799,7 @@ struct LogicalPackageBody {
 #[derive(Serialize, Deserialize)]
 struct LogicalModuleBody {
     path: String,
-    module_id: String,
+    stable_module_id: String,
     source: String,
 }
 
@@ -651,13 +807,14 @@ impl From<LogicalPackage> for LogicalPackageBody {
     fn from(package: LogicalPackage) -> Self {
         Self {
             package_version: package.package_version,
+            language_version: 1,
             config: package.config,
             modules: package
                 .modules
                 .into_iter()
                 .map(|module| LogicalModuleBody {
                     path: module.path,
-                    module_id: module.module_id,
+                    stable_module_id: module.module_id,
                     source: module.source,
                 })
                 .collect(),
@@ -711,6 +868,13 @@ async fn import_logical(
             "logical package_version must be 1",
         ));
     }
+    if package.language_version != 1 {
+        return Err(ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "unsupported_logical_package",
+            "logical language_version must be 1",
+        ));
+    }
     let state_for_worker = state.clone();
     let modules = package.modules.len();
     tokio::task::spawn_blocking(move || import_logical_package(&state_for_worker, package))
@@ -746,14 +910,14 @@ fn import_logical_package(state: &AppState, package: LogicalPackageBody) -> Resu
                 ));
             }
             let module_id = module
-                .module_id
+                .stable_module_id
                 .parse::<nostos_engine::StableModuleId>()
                 .map_err(|_| {
-                    ApiError::bad_request(format!("invalid module_id for {}", module.path))
+                    ApiError::bad_request(format!("invalid stable_module_id for {}", module.path))
                 })?;
             if config.module_id(&path) != Some(module_id) {
                 return Err(ApiError::bad_request(format!(
-                    "module_id does not match nostos.toml for {}",
+                    "stable_module_id does not match nostos.toml for {}",
                     module.path
                 )));
             }
@@ -827,7 +991,7 @@ impl ApiError {
     }
 
     fn bad_request(message: impl Into<String>) -> Self {
-        Self::new(StatusCode::BAD_REQUEST, "invalid_request", message)
+        Self::new(StatusCode::BAD_REQUEST, "bad_request", message)
     }
 
     fn internal(message: impl Into<String>) -> Self {

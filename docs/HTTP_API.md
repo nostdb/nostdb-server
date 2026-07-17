@@ -35,6 +35,7 @@ The stable version 1 error codes are `bad_request`, `unauthorized`,
   "query": "MATCH (n) RETURN n",
   "parameters": {},
   "stream": false,
+  "read_only": false,
   "limits": {
     "max_rows": 1000,
     "max_memory_bytes": 1048576,
@@ -50,6 +51,11 @@ limit but cannot raise it. Zero means no allowance, except `timeout_ms`, which
 must be positive. The server cooperatively checks cancellation, operation,
 traversal, intermediate-memory, and result-row budgets. A write that reaches a
 limit or timeout is rolled back before the error response is returned.
+
+`read_only: true` requires the statement to pass the Core read-only preparation
+path before execution. Mutating clauses are rejected with `query_error`; the
+server does not use text matching or silently remove unsupported syntax. This
+flag is intended for replaceable read-only consumers such as MCP adapters.
 
 The normal response is one JSON value containing either `columns` and `rows`,
 or mutation counters. With `stream: true`, a read response uses
@@ -80,6 +86,15 @@ configured cumulative budget.
 `GET /metrics` returns Prometheus text counters and the active-session gauge.
 `GET /healthz` returns liveness and `protocol_version` without opening an
 authenticated administration surface.
+
+### Read-only catalog
+
+The authenticated `GET /v1/catalog` endpoint returns protocol, format,
+generation, logical checksum, authority, and graph-count metadata.
+`GET /v1/schema` and `GET /v1/unresolved` return deterministic arrays. Their
+optional non-negative `limit` query parameter is capped by the configured
+query row limit, and each response includes `returned` and `truncated` fields.
+These endpoints expose no source text, snapshot bytes, or mutation operation.
 
 ### Snapshot boundary
 
