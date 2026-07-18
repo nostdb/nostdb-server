@@ -268,6 +268,8 @@ fn write_new_file(path: &Path, bytes: &[u8], protected: bool) -> Result<(), Serv
         use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o600);
     }
+    #[cfg(not(unix))]
+    let _ = protected;
     let mut file = options
         .open(path)
         .map_err(|error| ServerError::new(format!("cannot create {}: {error}", path.display())))?;
