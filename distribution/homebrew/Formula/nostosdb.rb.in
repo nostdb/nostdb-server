@@ -1,0 +1,48 @@
+# SPDX-License-Identifier: SSPL-1.0
+# Candidate template only. Publication requires separate authorization.
+
+class Nostosdb < Formula
+  desc "Source-first property graph database CLI and local service"
+  homepage "https://github.com/nostosdb/nostosdb-server"
+  version "@VERSION@"
+  license "SSPL-1.0"
+
+  on_arm do
+    url "@ARM64_URL@"
+    sha256 "@ARM64_SHA256@"
+  end
+
+  on_intel do
+    url "@X64_URL@"
+    sha256 "@X64_SHA256@"
+  end
+
+  def install
+    bin.install "nostos", "nostosd"
+  end
+
+  def post_install
+    (etc/"nostosdb").mkpath
+    (var/"nostosdb").mkpath
+    config = etc/"nostosdb/server.toml"
+    return if config.exist?
+
+    system bin/"nostosd", "init",
+      "--data-dir", var/"nostosdb",
+      "--config", config,
+      "--listen", "127.0.0.1:7878"
+  end
+
+  service do
+    run [opt_bin/"nostosd", "serve", "--config", etc/"nostosdb/server.toml"]
+    keep_alive true
+    log_path var/"log/nostosdb.log"
+    error_log_path var/"log/nostosdb.log"
+    working_dir var/"nostosdb"
+  end
+
+  test do
+    assert_equal "nostos #{version}", shell_output("#{bin}/nostos --version").strip
+    assert_equal "nostosd #{version}", shell_output("#{bin}/nostosd --version").strip
+  end
+end

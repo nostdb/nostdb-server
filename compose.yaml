@@ -1,0 +1,32 @@
+services:
+  init:
+    profiles: ["init"]
+    build:
+      context: ..
+      dockerfile: nostos-server/Dockerfile
+    command:
+      - init
+      - --data-dir
+      - /var/lib/nostosdb
+      - --config
+      - /etc/nostosdb/server.toml
+      - --listen
+      - 0.0.0.0:7878
+    volumes:
+      - nostos-config:/etc/nostosdb
+      - nostos-data:/var/lib/nostosdb
+
+  server:
+    build:
+      context: ..
+      dockerfile: nostos-server/Dockerfile
+    ports:
+      - "127.0.0.1:7878:7878"
+    volumes:
+      - nostos-config:/etc/nostosdb
+      - nostos-data:/var/lib/nostosdb
+    restart: unless-stopped
+
+volumes:
+  nostos-config:
+  nostos-data:

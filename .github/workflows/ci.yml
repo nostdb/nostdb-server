@@ -23,7 +23,7 @@ jobs:
         with: {path: nostos-server}
       - name: Check out Core
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with: {repository: nostosdb/nostos-core, path: nostos-core}
+        with: {repository: nostosdb/nostosdb-core, path: nostos-core}
       - name: Configure Rust
         run: rustup toolchain install ${{ matrix.rust }} --profile minimal --component rustfmt,clippy
       - name: Format

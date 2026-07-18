@@ -51,7 +51,7 @@ pub(crate) fn query_result(result: &QueryResult) -> Value {
     json!({
         "columns": result.columns,
         "rows": result.rows.iter().map(|row| {
-            row.iter().map(to_json).collect::<Vec<_>>()
+            row.iter().map(query_value_json).collect::<Vec<_>>()
         }).collect::<Vec<_>>(),
         "ordered": result.ordered,
     })
@@ -76,12 +76,17 @@ pub(crate) fn row_object(columns: &[String], row: &[QueryValue]) -> Value {
         columns
             .iter()
             .enumerate()
-            .map(|(index, column)| (column.clone(), row.get(index).map_or(Value::Null, to_json)))
+            .map(|(index, column)| {
+                (
+                    column.clone(),
+                    row.get(index).map_or(Value::Null, query_value_json),
+                )
+            })
             .collect(),
     )
 }
 
-fn to_json(value: &QueryValue) -> Value {
+pub(crate) fn query_value_json(value: &QueryValue) -> Value {
     match value {
         QueryValue::Null => Value::Null,
         QueryValue::Boolean(value) => Value::Bool(*value),
@@ -90,11 +95,11 @@ fn to_json(value: &QueryValue) -> Value {
         QueryValue::String(value) => Value::String(value.clone()),
         QueryValue::Bytes(value) => Value::String(hex(value)),
         QueryValue::Duration(value) => json!({"nanoseconds": value}),
-        QueryValue::List(values) => Value::Array(values.iter().map(to_json).collect()),
+        QueryValue::List(values) => Value::Array(values.iter().map(query_value_json).collect()),
         QueryValue::Map(values) => Value::Object(
             values
                 .iter()
-                .map(|(name, value)| (name.clone(), to_json(value)))
+                .map(|(name, value)| (name.clone(), query_value_json(value)))
                 .collect(),
         ),
         QueryValue::Node(node) => json!({
@@ -102,7 +107,7 @@ fn to_json(value: &QueryValue) -> Value {
             "state": format!("{:?}", node.state).to_ascii_lowercase(),
             "labels": node.labels,
             "properties": node.properties.iter().map(|(name, value)| {
-                (name.clone(), to_json(value))
+                (name.clone(), query_value_json(value))
             }).collect::<Map<_, _>>(),
         }),
         QueryValue::Edge(edge) => json!({
@@ -112,7 +117,7 @@ fn to_json(value: &QueryValue) -> Value {
             "target": edge.target.get(),
             "type": edge.relationship_type,
             "properties": edge.properties.iter().map(|(name, value)| {
-                (name.clone(), to_json(value))
+                (name.clone(), query_value_json(value))
             }).collect::<Map<_, _>>(),
         }),
     }

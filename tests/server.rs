@@ -426,11 +426,11 @@ async fn resource_limit_and_timeout_cancel_writes_before_commit() {
         }
     }
     assert!(timed_out > 0, "the nanosecond budget must cancel work");
-    let reopened = nostos_engine::EmbeddedDatabase::open(&timed.database)
-        .expect("timed-out database remains valid");
+    let catalog = timed.request("GET", "/v1/catalog", Body::empty()).await;
+    assert_eq!(catalog.status, StatusCode::OK);
     assert_eq!(
-        reopened.counts().expect("counts read").nodes,
-        committed,
+        catalog.json()["counts"]["nodes"],
+        json!(committed),
         "only requests reported as successful may commit"
     );
 

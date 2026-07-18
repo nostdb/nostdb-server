@@ -1,6 +1,10 @@
 # NostosDB HTTP API
 
-This document defines server protocol version 1. The Server protocol version,
+Status: implemented transitional evaluation transport.
+
+This document defines the currently implemented HTTP protocol version 1. It is retained for exact regression coverage and the current thin MCP adapter, but it is not the NostosDB database connection protocol and must not be treated as an application REST API platform. The installable daemon contract is defined in [DATABASE_SERVER.md](DATABASE_SERVER.md), and new CLI/driver framing is defined in [DATABASE_PROTOCOL.md](DATABASE_PROTOCOL.md).
+
+The HTTP protocol version,
 `.nostos` language version, and `.ndb` format version are independent.
 
 ## Authentication and errors

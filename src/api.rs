@@ -490,30 +490,32 @@ fn database_message(message: String) -> ApiError {
 }
 
 fn response(result: StatementResult, streaming: bool) -> Result<Response, ApiError> {
-    if streaming && let StatementResult::Read(result) = &result {
-        let mut chunks = Vec::with_capacity(result.rows.len() + 1);
-        chunks.push(Bytes::from(
-            serde_json::to_vec(&json!({
-                "columns": result.columns,
-                "ordered": result.ordered,
-            }))
-            .map_err(|error| ApiError::internal(error.to_string()))?,
-        ));
-        chunks.push(Bytes::from_static(b"\n"));
-        for row in &result.rows {
+    if streaming {
+        if let StatementResult::Read(result) = &result {
+            let mut chunks = Vec::with_capacity(result.rows.len() + 1);
             chunks.push(Bytes::from(
-                serde_json::to_vec(&wire::row_object(&result.columns, row))
-                    .map_err(|error| ApiError::internal(error.to_string()))?,
+                serde_json::to_vec(&json!({
+                    "columns": result.columns,
+                    "ordered": result.ordered,
+                }))
+                .map_err(|error| ApiError::internal(error.to_string()))?,
             ));
             chunks.push(Bytes::from_static(b"\n"));
+            for row in &result.rows {
+                chunks.push(Bytes::from(
+                    serde_json::to_vec(&wire::row_object(&result.columns, row))
+                        .map_err(|error| ApiError::internal(error.to_string()))?,
+                ));
+                chunks.push(Bytes::from_static(b"\n"));
+            }
+            let stream = stream::iter(chunks.into_iter().map(Ok::<_, Infallible>));
+            let mut response = Response::new(Body::from_stream(stream));
+            response.headers_mut().insert(
+                header::CONTENT_TYPE,
+                HeaderValue::from_static("application/x-ndjson"),
+            );
+            return Ok(response);
         }
-        let stream = stream::iter(chunks.into_iter().map(Ok::<_, Infallible>));
-        let mut response = Response::new(Body::from_stream(stream));
-        response.headers_mut().insert(
-            header::CONTENT_TYPE,
-            HeaderValue::from_static("application/x-ndjson"),
-        );
-        return Ok(response);
     }
     Ok(Json(wire::statement(&result)).into_response())
 }

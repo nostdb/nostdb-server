@@ -2,7 +2,13 @@
 //! Authenticated single-node HTTP boundary for the Nostos Engine.
 
 mod api;
+mod catalog;
+pub mod config;
+pub mod daemon;
+mod protocol;
 mod wire;
+
+pub use protocol::serve_database_protocol;
 
 /// Independent version of the public HTTP protocol.
 pub const SERVER_PROTOCOL_VERSION: u32 = 1;
@@ -88,7 +94,7 @@ impl ServerConfig {
 pub struct ServerError(String);
 
 impl ServerError {
-    fn new(message: impl Into<String>) -> Self {
+    pub(crate) fn new(message: impl Into<String>) -> Self {
         Self(message.into())
     }
 }
