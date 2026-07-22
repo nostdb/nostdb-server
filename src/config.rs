@@ -236,6 +236,8 @@ pub(crate) fn write_credential(path: &Path, credential: &str) -> Result<(), Serv
 }
 
 fn read_credential(path: &Path) -> Result<String, ServerError> {
+    #[cfg(unix)]
+    validate_credential_permissions(path)?;
     let credential = fs::read_to_string(path).map_err(|error| {
         ServerError::new(format!(
             "cannot read credential file {}: {error}",
@@ -250,6 +252,29 @@ fn read_credential(path: &Path) -> Result<String, ServerError> {
         )));
     }
     Ok(credential.to_owned())
+}
+
+#[cfg(unix)]
+fn validate_credential_permissions(path: &Path) -> Result<(), ServerError> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let mode = fs::metadata(path)
+        .map_err(|error| {
+            ServerError::new(format!(
+                "cannot inspect credential file {}: {error}",
+                path.display()
+            ))
+        })?
+        .permissions()
+        .mode()
+        & 0o777;
+    if mode & 0o077 != 0 {
+        return Err(ServerError::new(format!(
+            "credential file {} has mode {mode:03o}; remove all group and other permissions (0600 or stricter is required)",
+            path.display()
+        )));
+    }
+    Ok(())
 }
 
 fn write_new_file(path: &Path, bytes: &[u8], protected: bool) -> Result<(), ServerError> {
@@ -273,9 +298,23 @@ fn write_new_file(path: &Path, bytes: &[u8], protected: bool) -> Result<(), Serv
     let mut file = options
         .open(path)
         .map_err(|error| ServerError::new(format!("cannot create {}: {error}", path.display())))?;
-    file.write_all(bytes)
-        .and_then(|()| file.sync_all())
-        .map_err(|error| ServerError::new(format!("cannot persist {}: {error}", path.display())))
+    if let Err(error) = file.write_all(bytes).and_then(|()| file.sync_all()) {
+        drop(file);
+        return match fs::remove_file(path) {
+            Ok(()) => Err(ServerError::new(format!(
+                "cannot persist {}: {error}",
+                path.display()
+            ))),
+            Err(cleanup_error) if cleanup_error.kind() == std::io::ErrorKind::NotFound => Err(
+                ServerError::new(format!("cannot persist {}: {error}", path.display())),
+            ),
+            Err(cleanup_error) => Err(ServerError::new(format!(
+                "cannot persist {}: {error}; cannot remove partial file: {cleanup_error}",
+                path.display()
+            ))),
+        };
+    }
+    Ok(())
 }
 
 fn resolve_path(base: &Path, value: &Path) -> Result<PathBuf, ServerError> {

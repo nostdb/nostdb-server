@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use nostos_engine::{Parameters, QueryResult, QueryValue, StatementResult, WriteResult};
+use nostos_engine::{EdgeKind, Parameters, QueryResult, QueryValue, StatementResult, WriteResult};
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 
@@ -112,7 +112,7 @@ pub(crate) fn query_value_json(value: &QueryValue) -> Value {
         }),
         QueryValue::Edge(edge) => json!({
             "id": edge.id.get(),
-            "kind": format!("{:?}", edge.kind).to_ascii_lowercase(),
+            "kind": edge_kind_name(edge.kind),
             "source": edge.source.get(),
             "target": edge.target.get(),
             "type": edge.relationship_type,
@@ -120,6 +120,14 @@ pub(crate) fn query_value_json(value: &QueryValue) -> Value {
                 (name.clone(), query_value_json(value))
             }).collect::<Map<_, _>>(),
         }),
+    }
+}
+
+const fn edge_kind_name(kind: EdgeKind) -> &'static str {
+    match kind {
+        EdgeKind::Directed => "directed",
+        EdgeKind::Undirected => "directionless",
+        EdgeKind::Bidirectional => "bidirectional",
     }
 }
 
@@ -131,6 +139,18 @@ fn hex(bytes: &[u8]) -> String {
         output.push(char::from(DIGITS[usize::from(byte & 0x0f)]));
     }
     output
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn edge_kinds_use_the_public_machine_vocabulary() {
+        assert_eq!(edge_kind_name(EdgeKind::Directed), "directed");
+        assert_eq!(edge_kind_name(EdgeKind::Undirected), "directionless");
+        assert_eq!(edge_kind_name(EdgeKind::Bidirectional), "bidirectional");
+    }
 }
 
 #[derive(Serialize)]

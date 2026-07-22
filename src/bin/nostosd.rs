@@ -22,6 +22,30 @@ Configuration lookup is --config, NOSTOS_CONFIG, NOSTOS_HOME/config/server.toml,
 then the platform default.
 The default database-protocol listener is 127.0.0.1:7878.";
 
+const INIT_HELP: &str = "Initialize a fresh NostosDB daemon installation
+
+Usage:
+    nostosd init --data-dir PATH [--config PATH] [--listen IP:PORT]
+
+Options:
+    --data-dir PATH   Required fresh or empty daemon-owned data directory
+    --config PATH     New configuration file; defaults to the platform lookup path
+    --listen IP:PORT  Canonical numeric listener address [default: 127.0.0.1:7878]
+    -h, --help        Show this help
+
+Initialization never adopts existing data and never replaces an existing config.";
+
+const SERVE_HELP: &str = "Run the NostosDB database daemon in the foreground
+
+Usage:
+    nostosd serve [--config PATH]
+
+Options:
+    --config PATH  Existing configuration file; defaults to the platform lookup path
+    -h, --help     Show this help
+
+SIGINT and, on Unix, SIGTERM request a graceful shutdown.";
+
 #[tokio::main]
 async fn main() -> ExitCode {
     match run().await {
@@ -48,10 +72,24 @@ async fn run() -> Result<(), String> {
     }
     let command = arguments.remove(0);
     match command.as_str() {
+        "init" if help_requested(&arguments) => {
+            println!("{INIT_HELP}");
+            Ok(())
+        }
         "init" => initialize(parse_init(arguments)?),
+        "serve" if help_requested(&arguments) => {
+            println!("{SERVE_HELP}");
+            Ok(())
+        }
         "serve" => serve(parse_serve(arguments)?).await,
         _ => Err(format!("unknown command `{command}`\n\n{HELP}")),
     }
+}
+
+fn help_requested(arguments: &[String]) -> bool {
+    arguments
+        .iter()
+        .any(|argument| matches!(argument.as_str(), "-h" | "--help"))
 }
 
 struct InitOptions {
@@ -201,9 +239,38 @@ fn init_tracing() -> Result<(), String> {
     }
 }
 
+#[cfg(not(unix))]
 async fn shutdown_signal() {
     if let Err(error) = tokio::signal::ctrl_c().await {
         tracing::error!(%error, "failed to install shutdown signal handler");
+    }
+}
+
+#[cfg(unix)]
+async fn shutdown_signal() {
+    use tokio::signal::unix::{SignalKind, signal};
+
+    let mut terminate = match signal(SignalKind::terminate()) {
+        Ok(terminate) => terminate,
+        Err(error) => {
+            tracing::error!(%error, "failed to install SIGTERM handler");
+            if let Err(error) = tokio::signal::ctrl_c().await {
+                tracing::error!(%error, "failed to install shutdown signal handler");
+            }
+            return;
+        }
+    };
+    tokio::select! {
+        result = tokio::signal::ctrl_c() => {
+            if let Err(error) = result {
+                tracing::error!(%error, "failed to install shutdown signal handler");
+            }
+        }
+        signal = terminate.recv() => {
+            if signal.is_none() {
+                tracing::error!("SIGTERM signal stream ended unexpectedly");
+            }
+        }
     }
 }
 

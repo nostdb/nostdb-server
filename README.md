@@ -23,29 +23,61 @@ nostos --version
 
 Neither channel is published. The implemented `@nostosdb/server` wrapper selects one exact native Server package, depends on the exact matching `@nostosdb/cli`, contains no lifecycle downloader, and does not initialize or start the daemon during installation. CLI-only users install the separate `@nostosdb/cli` package.
 
+The Homebrew caveat keeps initialization explicit and first creates `~/.nostosdb/data`, `config`, and `logs` with mode `0700`; run it as the service user without `sudo`.
+
 ## Initialize and run `nostosd`
 
+From this repository root, the following builds both sibling binaries and keeps all evaluation state in a disposable absolute temporary directory:
+
 ```bash
-cargo run --bin nostosd -- init \
-  --data-dir ./evaluation/data \
-  --config ./evaluation/server.toml \
+set -eu
+WORKSPACE_ROOT="$(cd .. && pwd -P)"
+EVALUATION_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/nostosdb-server.XXXXXX")"
+SERVER_BIN="$WORKSPACE_ROOT/nostosdb-server/target/debug/nostosd"
+CLI_BIN="$WORKSPACE_ROOT/nostosdb-cli/target/debug/nostos"
+DAEMON_PID=
+cleanup() {
+  if [ -n "${DAEMON_PID:-}" ]; then
+    kill -TERM "$DAEMON_PID" 2>/dev/null || true
+    wait "$DAEMON_PID" 2>/dev/null || true
+    DAEMON_PID=
+  fi
+  rm -rf -- "$EVALUATION_ROOT"
+}
+trap cleanup EXIT
+
+cargo build --locked --manifest-path "$WORKSPACE_ROOT/nostosdb-server/Cargo.toml" --bin nostosd
+cargo build --locked --manifest-path "$WORKSPACE_ROOT/nostosdb-cli/Cargo.toml" --bin nostos
+"$SERVER_BIN" init \
+  --data-dir "$EVALUATION_ROOT/data" \
+  --config "$EVALUATION_ROOT/server.toml" \
   --listen 127.0.0.1:7878
-cargo run --bin nostosd -- serve --config ./evaluation/server.toml
+"$SERVER_BIN" serve --config "$EVALUATION_ROOT/server.toml" &
+DAEMON_PID=$!
+
+attempt=0
+until "$CLI_BIN" server ping \
+  --server nostos://127.0.0.1:7878 \
+  --credential-file "$EVALUATION_ROOT/data/credentials/client.token" >/dev/null 2>&1
+do
+  attempt=$((attempt + 1))
+  test "$attempt" -lt 100
+  sleep 0.05
+done
+
+"$CLI_BIN" database create knowledge \
+  --server nostos://127.0.0.1:7878 \
+  --credential-file "$EVALUATION_ROOT/data/credentials/admin.token"
+"$CLI_BIN" query \
+  --server nostos://127.0.0.1:7878 --database knowledge \
+  --credential-file "$EVALUATION_ROOT/data/credentials/client.token" \
+  'RETURN 1 AS ready'
+
+cleanup
+trap - EXIT
 ```
 
 Initialization refuses to adopt a non-empty directory. It creates the versioned catalog plus separate protected `client.token` and `admin.token` files and prints only their paths. `serve` acquires the data-directory lock, recovers completed catalog/snapshot operations, opens every managed Database exclusively, and then accepts protocol connections.
-
-From the sibling CLI repository:
-
-```bash
-../nostosdb-cli/target/debug/nostos database create knowledge \
-  --server nostos://127.0.0.1:7878 \
-  --credential-file ./evaluation/data/credentials/admin.token
-../nostosdb-cli/target/debug/nostos query \
-  --server nostos://127.0.0.1:7878 --database knowledge \
-  --credential-file ./evaluation/data/credentials/client.token \
-  'RETURN 1 AS ready'
-```
 
 The CLI also supports Database list/inspect/rename/guarded drop, physical snapshot/restore, logical export/import, and a remote REPL with transactions. It contains no HTTP endpoint knowledge.
 
@@ -58,10 +90,19 @@ Candidate definitions are under [distribution](distribution/README.md):
 - npm wrapper/platform candidates for `@nostosdb/server`, exposing `nostosd` and the exact matching `nostos` CLI;
 - Homebrew formula `nostosdb`, commands `nostos`/`nostosd`, and a per-user service rooted at `~/.nostosdb`;
 - systemd service for `/etc/nostosdb/server.toml` and `/var/lib/nostosdb`;
-- explicit Windows Service registration for `%PROGRAMDATA%\NostosDB\server.toml`;
+- Windows foreground execution; Service Control Manager integration and protected credential ACL installation remain explicitly deferred;
 - [Dockerfile](Dockerfile) and [compose.yaml](compose.yaml) with separate config and authoritative data volumes.
 
 These are unpublished review candidates, not supported installers or registered services.
+
+For the Compose candidate, initialize the named volumes exactly once before starting the server:
+
+```bash
+docker compose --profile init run --rm init
+docker compose up server
+```
+
+Stop it with `docker compose down`. The named volumes intentionally remain for later starts; `docker compose down --volumes` also deletes all initialized database state.
 
 ## Transitional HTTP protocol version 1
 
@@ -94,7 +135,7 @@ The complete request, response, session, limit, and import/export contract is in
 Example query:
 
 ```bash
-curl -sS http://127.0.0.1:7878/v1/query \
+curl -sS http://127.0.0.1:8787/v1/query \
   -H 'Authorization: Bearer replace-me' \
   -H 'Content-Type: application/json' \
   --data '{"query":"MATCH (n) RETURN n","stream":true,"read_only":true}'
@@ -105,7 +146,7 @@ Snapshot restore opens and integrity-checks the uploaded Format 0 artifact befor
 ## Verify
 
 ```bash
-cargo metadata --no-deps --locked --workspace
+cargo metadata --format-version 1 --no-deps --locked
 cargo fmt --all --check
 cargo check --workspace --all-targets --all-features --locked
 cargo clippy --workspace --all-targets --all-features --locked -- -D warnings

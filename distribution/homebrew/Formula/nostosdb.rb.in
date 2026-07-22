@@ -21,22 +21,20 @@ class Nostosdb < Formula
     bin.install "nostos", "nostosd"
   end
 
-  def post_install
-    nostos_home = Pathname.new(Dir.home)/".nostosdb"
-    config_dir = nostos_home/"config"
-    data_dir = nostos_home/"data"
-    logs_dir = nostos_home/"logs"
-    config_dir.mkpath
-    data_dir.mkpath
-    logs_dir.mkpath
-    nostos_home.chmod(0700)
-    config = config_dir/"server.toml"
-    return if config.exist?
+  def caveats
+    <<~EOS
+      Initialize per-user state before starting the service:
+        mkdir -p "$HOME/.nostosdb/data" "$HOME/.nostosdb/config" "$HOME/.nostosdb/logs"
+        chmod 700 "$HOME/.nostosdb" "$HOME/.nostosdb/data" "$HOME/.nostosdb/config" "$HOME/.nostosdb/logs"
+        #{opt_bin}/nostosd init \
+          --data-dir "$HOME/.nostosdb/data" \
+          --config "$HOME/.nostosdb/config/server.toml" \
+          --listen 127.0.0.1:7878
+        brew services start nostosdb
 
-    system bin/"nostosd", "init",
-      "--data-dir", data_dir,
-      "--config", config,
-      "--listen", "127.0.0.1:7878"
+      Initialization is explicit because Homebrew runs post_install with a
+      temporary HOME that is removed after installation.
+    EOS
   end
 
   service do

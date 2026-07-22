@@ -556,6 +556,15 @@ async fn snapshot_restore_validates_compatibility_before_replacing_live_database
         .await;
     assert_eq!(rejected.status, StatusCode::BAD_REQUEST);
     assert_names(&server, &["Before"]).await;
+    assert!(
+        std::fs::read_dir(&server.directory)
+            .expect("server directory reads")
+            .all(|entry| !entry
+                .expect("server directory entry reads")
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".nostos-logical-import-"))
+    );
 }
 
 async fn assert_names(server: &TestServer, expected: &[&str]) {

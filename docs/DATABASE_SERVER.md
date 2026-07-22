@@ -40,6 +40,8 @@ nostos query --server nostos://127.0.0.1:7878 --database knowledge \
   'MATCH (n) RETURN n LIMIT 100'
 ```
 
+The `/var/lib` example assumes the daemon service identity owns the data tree. For the systemd candidate, do not initialize as `root` and leave root-owned `0600` credentials; follow the service-user procedure under `distribution/systemd`.
+
 The CLI remains the primary interactive and administrative client, analogous to `psql`. `nostosd` does not include an interactive shell.
 
 Commands that delete a Database, replace a snapshot, change authority, or rotate credentials require explicit operator intent and must not be inferred from project discovery.
@@ -173,7 +175,7 @@ The release target includes the same `nostosd` binary for foreground, native-ser
 Direct archive: nostos, nostosd, licenses, notices, checksums
 Homebrew:       brew services start nostosdb
 Linux:          systemd unit invoking nostosd serve
-Windows:        Windows Service invoking nostosd serve
+Windows:        foreground nostosd serve (Service Control Manager host deferred)
 Docker:         nostosd serve with a mounted data volume
 ```
 
@@ -185,13 +187,15 @@ Target defaults keep platform conventions without making their paths part of Dat
 |---|---|---|---|
 | Homebrew macOS | `~/.nostosdb/config/server.toml` | `~/.nostosdb/data` | per-user `nostosdb` Homebrew service; logs in `~/.nostosdb/logs` |
 | Linux system package | `/etc/nostosdb/server.toml` | `/var/lib/nostosdb` | systemd unit with a dedicated account |
-| Windows package | `%PROGRAMDATA%\\NostosDB\\server.toml` | `%PROGRAMDATA%\\NostosDB\\data` | Windows Service with a restricted identity |
+| Windows source preview | `%PROGRAMDATA%\\NostosDB\\server.toml` | `%PROGRAMDATA%\\NostosDB\\data` | Foreground console process; Service Control Manager integration is not implemented |
 | Docker | `/etc/nostosdb/server.toml` | `/var/lib/nostosdb` | foreground PID 1 with a named volume |
 | Direct developer run | explicit `--config` | explicit initialized directory | foreground process |
 
 Every default is overridable through explicit installation/configuration. The daemon records normalized paths only as local operational state; protocol clients see stable Database IDs and names.
 
 `nostosd` resolves an omitted `--config` in this order: `NOSTOS_CONFIG`, `NOSTOS_HOME/config/server.toml`, then the platform default above. The Homebrew service sets `NOSTOS_HOME` to the installing user's `~/.nostosdb` and should be run without `sudo`. Homebrew's package and service name is `nostosdb`; the executable names remain `nostos` and `nostosd`.
+
+The Linux systemd candidate must be initialized once as its `nostosdb` service account. The exact [systemd initialization procedure](../distribution/systemd/README.md) creates `/etc/nostosdb` and `/var/lib/nostosdb` with deliberate ownership, runs `nostosd init` as `nostosdb`, then makes only `server.toml` root-owned and group-readable. This preserves service access to the generated `0600` credentials while preventing the daemon from rewriting its configuration.
 
 The Docker contract mounts separate configuration and authoritative data volumes. The unpublished local candidate is initialized once, then its default `nostosd serve --config /etc/nostosdb/server.toml` command runs as PID 1:
 

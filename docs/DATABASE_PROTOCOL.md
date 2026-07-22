@@ -57,13 +57,13 @@ Roles are:
 
 After authentication a connection has no selected Database, no transaction, and no snapshot upload.
 
-1. `select_database` selects a catalog name and returns `database_selected` with stable ID, name, and state.
+1. `select_database` resolves a catalog name, binds the connection to that immutable stable Database ID, and returns `database_selected` with stable ID, name, and state. A later rename preserves the selection; a drop makes it unavailable even if another Database reuses the old name.
 2. `query`, `begin`, `commit`, and `rollback` require a selected Database.
 3. `begin` creates one connection-local transaction queue. Queries return `queued`; `commit` executes the complete queue through `nostos-engine::execute_transaction_limited`, and `rollback` discards it.
 4. Database selection, rename/drop, restore, and logical import are rejected while a transaction is active.
 5. Connection close cancels active cooperative queries, discards a queued transaction, and drops an incomplete snapshot upload.
 
-The selected name is a catalog lookup, not a path. Managed file paths never appear in protocol frames.
+The name supplied during selection is a one-time catalog lookup, not connection identity or a path. Subsequent operations use the selected stable ID, and managed file paths never appear in protocol frames.
 
 ## Query requests and results
 
@@ -97,6 +97,8 @@ A non-streaming success is `result` with the existing stable statement JSON shap
   }
 }
 ```
+
+Projected Edge values use the stable machine-readable `kind` values `directed`, `directionless`, and `bidirectional`.
 
 A streamed read is exactly:
 
@@ -150,7 +152,7 @@ snapshot_restore_chunk(sequence,data)         -> snapshot_restore(state="chunk_a
 snapshot_restore_commit                      -> snapshot_restore(state="restored")
 ```
 
-The upload must equal its declared size and remain within `max_snapshot_bytes`. The daemon writes a candidate, opens it through Core, runs integrity checks, adopts Server authority, checkpoints it, journals the replacement, and atomically swaps it with a rollback backup. `snapshot_restore_abort` discards the connection-local upload. Startup deterministically finishes or rolls back an interrupted replacement before opening the Database.
+The upload must equal its declared size and remain within `max_snapshot_bytes`. The daemon writes a candidate, opens it through Core, runs integrity checks, adopts Server authority, checkpoints it, journals the replacement, and atomically swaps it with a rollback backup. On Unix, it synchronizes the containing directory after journal creation, after each candidate/live/backup rename, after backup deletion but before journal deletion, and after final journal deletion; the non-Unix directory-sync helper is an explicit no-op until an equivalent platform durability implementation is reviewed. `snapshot_restore_abort` discards the connection-local upload. Startup deterministically finishes or rolls back an interrupted replacement before opening the Database.
 
 Physical restore is exact-format replacement. Logical import is portable source compilation. Neither operation silently merges with live data.
 

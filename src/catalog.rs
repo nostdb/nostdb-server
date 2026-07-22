@@ -67,7 +67,8 @@ pub(crate) struct CatalogStore {
 
 impl CatalogStore {
     pub(crate) fn initialize(root: &Path) -> Result<Self, ServerError> {
-        if root.exists() {
+        let root_existed = root.exists();
+        if root_existed {
             let mut entries = fs::read_dir(root).map_err(|error| {
                 ServerError::new(format!(
                     "cannot inspect data directory {}: {error}",
@@ -90,27 +91,89 @@ impl CatalogStore {
                     root.display()
                 )));
             }
+        } else if let Err(error) = fs::create_dir_all(root) {
+            let error = ServerError::new(format!(
+                "cannot create data directory {}: {error}",
+                root.display()
+            ));
+            return match rollback_created_directories(root, root_existed, &[]) {
+                Ok(()) => Err(error),
+                Err(rollback_error) => Err(ServerError::new(format!(
+                    "{error}; catalog initialization rollback was incomplete: {rollback_error}"
+                ))),
+            };
+        }
+        let mut created_directories = Vec::new();
+        let result = (|| {
+            for directory in ["databases", "snapshots", "locks", "recovery", "trash"] {
+                let path = root.join(directory);
+                fs::create_dir(&path).map_err(|error| {
+                    ServerError::new(format!("cannot create data layout: {error}"))
+                })?;
+                created_directories.push(path);
+            }
+            let catalog = Catalog {
+                catalog_version: CATALOG_VERSION,
+                databases: Vec::new(),
+            };
+            write_atomic(root, &catalog, true)?;
+            Ok(Self {
+                root: root.to_path_buf(),
+                catalog,
+            })
+        })();
+        match result {
+            Ok(store) => Ok(store),
+            Err(error) => {
+                match rollback_created_directories(root, root_existed, &created_directories) {
+                    Ok(()) => Err(error),
+                    Err(rollback_error) => Err(ServerError::new(format!(
+                        "{error}; catalog initialization rollback was incomplete: {rollback_error}"
+                    ))),
+                }
+            }
+        }
+    }
+
+    pub(crate) fn rollback_initialization(
+        root: &Path,
+        root_existed: bool,
+    ) -> Result<(), ServerError> {
+        let mut failures = Vec::new();
+        for file in [PENDING_FILE, PREVIOUS_FILE, OPERATION_FILE, STATE_FILE] {
+            let path = root.join(file);
+            match fs::remove_file(&path) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => {
+                    failures.push(format!("cannot remove {}: {error}", path.display()));
+                }
+            }
+        }
+        for directory in ["trash", "recovery", "locks", "snapshots", "databases"] {
+            let path = root.join(directory);
+            match fs::remove_dir(&path) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => {
+                    failures.push(format!("cannot remove {}: {error}", path.display()));
+                }
+            }
+        }
+        if !root_existed {
+            match fs::remove_dir(root) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => {
+                    failures.push(format!("cannot remove {}: {error}", root.display()));
+                }
+            }
+        }
+        if failures.is_empty() {
+            Ok(())
         } else {
-            fs::create_dir_all(root).map_err(|error| {
-                ServerError::new(format!(
-                    "cannot create data directory {}: {error}",
-                    root.display()
-                ))
-            })?;
+            Err(ServerError::new(failures.join("; ")))
         }
-        for directory in ["databases", "snapshots", "locks", "recovery", "trash"] {
-            fs::create_dir(root.join(directory))
-                .map_err(|error| ServerError::new(format!("cannot create data layout: {error}")))?;
-        }
-        let catalog = Catalog {
-            catalog_version: CATALOG_VERSION,
-            databases: Vec::new(),
-        };
-        write_atomic(root, &catalog, true)?;
-        Ok(Self {
-            root: root.to_path_buf(),
-            catalog,
-        })
     }
 
     pub(crate) fn load(root: &Path) -> Result<Self, ServerError> {
@@ -375,6 +438,7 @@ fn write_atomic(root: &Path, catalog: &Catalog, create: bool) -> Result<(), Serv
         })?;
     }
     if let Err(error) = fs::rename(&pending, &state) {
+        let _ = fs::remove_file(&pending);
         if !create {
             let _ = fs::rename(&previous, &state);
         }
@@ -401,9 +465,50 @@ fn write_json_new(path: &Path, value: &impl Serialize) -> Result<(), ServerError
         .write(true)
         .open(path)
         .map_err(|error| ServerError::new(format!("cannot create {}: {error}", path.display())))?;
-    file.write_all(&bytes)
-        .and_then(|()| file.sync_all())
-        .map_err(|error| ServerError::new(format!("cannot persist {}: {error}", path.display())))
+    if let Err(error) = file.write_all(&bytes).and_then(|()| file.sync_all()) {
+        drop(file);
+        return match fs::remove_file(path) {
+            Ok(()) => Err(ServerError::new(format!(
+                "cannot persist {}: {error}",
+                path.display()
+            ))),
+            Err(cleanup_error) if cleanup_error.kind() == std::io::ErrorKind::NotFound => Err(
+                ServerError::new(format!("cannot persist {}: {error}", path.display())),
+            ),
+            Err(cleanup_error) => Err(ServerError::new(format!(
+                "cannot persist {}: {error}; cannot remove partial file: {cleanup_error}",
+                path.display()
+            ))),
+        };
+    }
+    Ok(())
+}
+
+fn rollback_created_directories(
+    root: &Path,
+    root_existed: bool,
+    created_directories: &[PathBuf],
+) -> Result<(), ServerError> {
+    let mut failures = Vec::new();
+    for path in created_directories.iter().rev() {
+        match fs::remove_dir(path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => failures.push(format!("cannot remove {}: {error}", path.display())),
+        }
+    }
+    if !root_existed {
+        match fs::remove_dir(root) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => failures.push(format!("cannot remove {}: {error}", root.display())),
+        }
+    }
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(ServerError::new(failures.join("; ")))
+    }
 }
 
 fn read_catalog(path: &Path) -> Result<Catalog, ServerError> {

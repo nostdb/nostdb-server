@@ -22,7 +22,7 @@ const RESPONSE_QUEUE: usize = 8;
 
 struct ConnectionState {
     role: ClientRole,
-    selected_database: Option<String>,
+    selected_database_id: Option<String>,
     transaction: Option<Vec<QueuedStatement>>,
     restore: Option<SnapshotUpload>,
     last_request_id: u64,
@@ -189,7 +189,7 @@ async fn handle_connection(
     let mut tasks = JoinSet::new();
     let mut state = ConnectionState {
         role,
-        selected_database: None,
+        selected_database_id: None,
         transaction: None,
         restore: None,
         last_request_id: hello.request_id,
@@ -293,7 +293,7 @@ async fn dispatch(
         ClientRequest::Ping => send_response(&sender, request_id, ServerResponse::Pong).await,
         ClientRequest::SelectDatabase { database } => match daemon.select_database(&database) {
             Ok(summary) => {
-                state.selected_database = Some(database);
+                state.selected_database_id = Some(summary.id.clone());
                 send_response(
                     &sender,
                     request_id,
@@ -310,7 +310,7 @@ async fn dispatch(
             stream,
             limits,
         } => {
-            let Some(database) = state.selected_database.clone() else {
+            let Some(database_id) = state.selected_database_id.clone() else {
                 return send_failure(
                     &sender,
                     request_id,
@@ -376,8 +376,8 @@ async fn dispatch(
                 let daemon_for_query = daemon.clone();
                 let query_token = token.clone();
                 let mut worker = tokio::task::spawn_blocking(move || {
-                    daemon_for_query.execute(
-                        &database,
+                    daemon_for_query.execute_selected(
+                        &database_id,
                         &query,
                         parameters,
                         read_only,
@@ -423,7 +423,7 @@ async fn dispatch(
                     ),
                 )
                 .await
-            } else if state.selected_database.is_none() {
+            } else if state.selected_database_id.is_none() {
                 send_failure(
                     &sender,
                     request_id,
@@ -455,7 +455,7 @@ async fn dispatch(
                 )
                 .await;
             };
-            let Some(database) = state.selected_database.clone() else {
+            let Some(database_id) = state.selected_database_id.clone() else {
                 return send_failure(
                     &sender,
                     request_id,
@@ -491,7 +491,11 @@ async fn dispatch(
                 let daemon_for_query = daemon.clone();
                 let query_token = token.clone();
                 let mut worker = tokio::task::spawn_blocking(move || {
-                    daemon_for_query.execute_transaction(&database, statements, query_token)
+                    daemon_for_query.execute_selected_transaction(
+                        &database_id,
+                        statements,
+                        query_token,
+                    )
                 });
                 let result = match tokio::time::timeout(timeout, &mut worker).await {
                     Ok(Ok(result)) => result,
@@ -601,9 +605,6 @@ async fn dispatch(
         }
         ClientRequest::DatabaseRename { database, new_name } => {
             let result = daemon.rename_database(&database, &new_name);
-            if state.selected_database.as_deref() == Some(database.as_str()) && result.is_ok() {
-                state.selected_database = Some(new_name);
-            }
             respond_result(&sender, request_id, result, |database| {
                 ServerResponse::DatabaseRenamed { database }
             })
@@ -614,9 +615,11 @@ async fn dispatch(
             confirm_name,
         } => {
             let result = daemon.drop_database(&database, &confirm_name);
-            if state.selected_database.as_deref() == Some(database.as_str()) && result.is_ok() {
-                state.selected_database = None;
-                state.transaction = None;
+            if let Ok(dropped) = &result {
+                if state.selected_database_id.as_deref() == Some(dropped.id.as_str()) {
+                    state.selected_database_id = None;
+                    state.transaction = None;
+                }
             }
             respond_result(&sender, request_id, result, |database| {
                 ServerResponse::DatabaseDropped {

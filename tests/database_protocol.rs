@@ -496,6 +496,93 @@ async fn protocol_timeout_never_reports_a_rolled_back_write_as_committed() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn selected_database_stays_bound_to_its_stable_id_across_rename_and_name_reuse() {
+    let installation = Installation::new("stable-selection");
+    let running = installation.start(|_| {}).await;
+    let mut admin = connect(&running.address, &installation.admin);
+    let original = match request(
+        &mut admin,
+        ClientRequest::DatabaseCreate {
+            name: "alpha".to_owned(),
+        },
+    ) {
+        ServerResponse::DatabaseCreated { database } => database,
+        response => panic!("unexpected create response {response:?}"),
+    };
+    let mut selected = connect(&running.address, &installation.query);
+    select(&mut selected, "alpha");
+
+    let renamed = match request(
+        &mut admin,
+        ClientRequest::DatabaseRename {
+            database: "alpha".to_owned(),
+            new_name: "beta".to_owned(),
+        },
+    ) {
+        ServerResponse::DatabaseRenamed { database } => database,
+        response => panic!("unexpected rename response {response:?}"),
+    };
+    assert_eq!(renamed.id, original.id);
+    let replacement = match request(
+        &mut admin,
+        ClientRequest::DatabaseCreate {
+            name: "alpha".to_owned(),
+        },
+    ) {
+        ServerResponse::DatabaseCreated { database } => database,
+        response => panic!("unexpected replacement create response {response:?}"),
+    };
+    assert_ne!(replacement.id, original.id);
+
+    query(&mut selected, "CREATE (n {owner: 'original'})");
+    select(&mut admin, "beta");
+    assert_eq!(
+        rows(&query(&mut admin, "MATCH (n) RETURN n.owner AS owner")),
+        &[json!(["original"])]
+    );
+    select(&mut admin, "alpha");
+    assert_eq!(
+        rows(&query(&mut admin, "MATCH (n) RETURN count(n) AS count")),
+        &[json!([0])]
+    );
+
+    request(
+        &mut admin,
+        ClientRequest::DatabaseDrop {
+            database: "beta".to_owned(),
+            confirm_name: "beta".to_owned(),
+        },
+    );
+    assert_eq!(
+        server_error(selected.request(ClientRequest::Query {
+            query: "RETURN 1".to_owned(),
+            parameters: BTreeMap::new(),
+            read_only: true,
+            stream: false,
+            limits: None,
+        })),
+        ErrorCode::DatabaseNotFound
+    );
+    request(
+        &mut admin,
+        ClientRequest::DatabaseCreate {
+            name: "beta".to_owned(),
+        },
+    );
+    assert_eq!(
+        server_error(selected.request(ClientRequest::Query {
+            query: "RETURN 1".to_owned(),
+            parameters: BTreeMap::new(),
+            read_only: true,
+            stream: false,
+            limits: None,
+        })),
+        ErrorCode::DatabaseNotFound
+    );
+    running.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn named_databases_survive_restart_snapshot_logical_import_and_exclusive_ownership() {
     let installation = Installation::new("lifecycle");
     let running = installation.start(|_| {}).await;

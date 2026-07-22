@@ -15,6 +15,15 @@ fn native_services_execute_the_same_daemon_config_contract() {
     );
     assert!(systemd.contains("User=nostosdb"));
     assert!(systemd.contains("ReadWritePaths=/var/lib/nostosdb"));
+    assert!(systemd.contains("StateDirectoryMode=0700"));
+    assert!(!systemd.contains("ConfigurationDirectory="));
+    let systemd_instructions = fs::read_to_string(root().join("distribution/systemd/README.md"))
+        .expect("systemd initialization instructions read");
+    assert!(systemd_instructions.contains("sudo --user=nostosdb --"));
+    assert!(systemd_instructions.contains("chown root:nostosdb /etc/nostosdb/server.toml"));
+    assert!(systemd_instructions.contains("chown root:nostosdb /etc/nostosdb\n"));
+    assert!(systemd_instructions.contains("chmod 0750 /etc/nostosdb"));
+    assert!(systemd_instructions.contains("0600"));
 
     let homebrew = fs::read_to_string(root().join("distribution/homebrew/Formula/nostosdb.rb.in"))
         .expect("Homebrew candidate reads");
@@ -23,19 +32,26 @@ fn native_services_execute_the_same_daemon_config_contract() {
     assert!(homebrew.contains(
         "run [opt_bin/\"nostosd\", \"serve\", \"--config\", (nostos_home/\"config/server.toml\").to_s]"
     ));
-    assert!(homebrew.contains("Pathname.new(Dir.home)/\".nostosdb\""));
-    assert!(homebrew.contains("data_dir = nostos_home/\"data\""));
-    assert!(homebrew.contains("logs_dir = nostos_home/\"logs\""));
+    assert!(homebrew.contains("$HOME/.nostosdb"));
+    assert!(homebrew.contains("Homebrew runs post_install with a"));
+    assert!(!homebrew.contains("def post_install"));
+    assert!(homebrew.contains("--data-dir \"$HOME/.nostosdb/data\""));
+    assert!(homebrew.contains(
+        "mkdir -p \"$HOME/.nostosdb/data\" \"$HOME/.nostosdb/config\" \"$HOME/.nostosdb/logs\""
+    ));
+    assert!(homebrew.contains(
+        "chmod 700 \"$HOME/.nostosdb\" \"$HOME/.nostosdb/data\" \"$HOME/.nostosdb/config\" \"$HOME/.nostosdb/logs\""
+    ));
     assert!(homebrew.contains("environment_variables NOSTOS_HOME: nostos_home.to_s"));
     assert!(!homebrew.contains("etc/\"nostosdb"));
     assert!(!homebrew.contains("var/\"nostosdb"));
-    assert!(homebrew.contains("\"--listen\", \"127.0.0.1:7878\""));
+    assert!(homebrew.contains("--listen 127.0.0.1:7878"));
 
     let windows = fs::read_to_string(root().join("distribution/windows/install-service.ps1"))
         .expect("Windows Service candidate reads");
-    assert!(windows.contains("nostosd.exe"));
-    assert!(windows.contains("serve --config"));
-    assert!(windows.contains("$env:ProgramData\\NostosDB\\server.toml"));
+    assert!(windows.contains("Windows Service registration is not implemented"));
+    assert!(windows.contains("foreground console process"));
+    assert!(!windows.contains("sc.exe create"));
     assert!(!windows.contains("NOSTOS_CREDENTIAL="));
 }
 
@@ -52,4 +68,8 @@ fn docker_uses_persistent_config_and_data_volumes_without_publication() {
     assert!(compose.contains("nostos-data:/var/lib/nostosdb"));
     assert!(compose.contains("127.0.0.1:7878:7878"));
     assert!(!compose.contains("latest"));
+
+    let readme = fs::read_to_string(root().join("README.md")).expect("Server README reads");
+    assert!(readme.contains("docker compose --profile init run --rm init"));
+    assert!(readme.contains("docker compose up server"));
 }

@@ -952,11 +952,13 @@ fn import_logical_package(state: &AppState, package: LogicalPackageBody) -> Resu
             fs::read(candidate_path).map_err(|error| ApiError::internal(error.to_string()))?;
         restore_snapshot(state, &bytes)
     })();
-    let cleanup = fs::remove_dir_all(&directory);
-    if result.is_ok() {
-        cleanup.map_err(|error| {
-            ApiError::internal(format!("logical import cleanup failed: {error}"))
-        })?;
+    if let Err(error) = fs::remove_dir_all(&directory) {
+        tracing::warn!(
+            path = %directory.display(),
+            operation_succeeded = result.is_ok(),
+            %error,
+            "logical import temporary-directory cleanup failed"
+        );
     }
     result
 }
