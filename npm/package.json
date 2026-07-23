@@ -23,6 +23,10 @@
     "url": "git+https://github.com/nostdb/nostdb-server.git",
     "directory": "npm"
   },
+  "homepage": "https://github.com/nostdb/nostdb-server#readme",
+  "bugs": {
+    "url": "https://github.com/nostdb/nostdb-server/issues"
+  },
   "dependencies": {
     "@nostdb/cli": "0.0.1"
   },

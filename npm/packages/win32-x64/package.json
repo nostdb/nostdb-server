@@ -7,5 +7,7 @@
   "cpu": ["x64"],
   "files": ["bin/nostd.exe", "LICENSE", "NOTICE", "README.md"],
   "repository": {"type": "git", "url": "git+https://github.com/nostdb/nostdb-server.git", "directory": "npm/packages/win32-x64"},
+  "homepage": "https://github.com/nostdb/nostdb-server#readme",
+  "bugs": {"url": "https://github.com/nostdb/nostdb-server/issues"},
   "publishConfig": {"access": "public"}
 }

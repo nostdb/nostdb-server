@@ -8,5 +8,7 @@
   "libc": ["glibc"],
   "files": ["bin/nostd", "LICENSE", "NOTICE", "README.md"],
   "repository": {"type": "git", "url": "git+https://github.com/nostdb/nostdb-server.git", "directory": "npm/packages/linux-arm64-gnu"},
+  "homepage": "https://github.com/nostdb/nostdb-server#readme",
+  "bugs": {"url": "https://github.com/nostdb/nostdb-server/issues"},
   "publishConfig": {"access": "public"}
 }
