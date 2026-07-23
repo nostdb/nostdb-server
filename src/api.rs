@@ -221,7 +221,7 @@ async fn catalog(State(state): State<AppState>) -> Result<Json<Value>, ApiError>
                 "checksum_codec_version": info.checksum_codec_version,
                 "generation": info.generation,
                 "logical_checksum": format!("{:016x}", info.logical_checksum),
-                "source_managed": info.source_managed,
+                "nost": info.nost,
             },
             "counts": {
                 "schemas": counts.schemas,

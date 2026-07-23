@@ -482,12 +482,14 @@ dependencies = [
 name = "nostdb-engine"
 version = "0.0.1"
 dependencies = [
+ "blake3",
  "nostdb-catalog",
  "nostdb-parser",
  "nostdb-query",
  "nostdb-storage",
  "nostdb-sync",
  "nostdb-syntax",
+ "serde_json",
 ]
 
 [[package]]

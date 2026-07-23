@@ -182,9 +182,9 @@ impl AppState {
         let info = database
             .info()
             .map_err(|error| ServerError::new(error.to_string()))?;
-        if info.source_managed {
+        if info.nost {
             return Err(ServerError::new(
-                "server mode refuses a Source Mode database; import an NDB-only snapshot",
+                "server mode refuses a database with a human-readable-source synchronization baseline; import an NDB-only snapshot",
             ));
         }
         Ok(Self {

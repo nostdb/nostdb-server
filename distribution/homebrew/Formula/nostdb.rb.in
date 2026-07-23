@@ -2,7 +2,7 @@
 # Candidate template only. Publication requires separate authorization.
 
 class Nostdb < Formula
-  desc "Source-first property graph database CLI and local service"
+  desc "NDB-first property graph database CLI and local service"
   homepage "https://github.com/nostdb/nostdb-server"
   version "@VERSION@"
   license "SSPL-1.0"

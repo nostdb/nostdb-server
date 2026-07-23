@@ -16,7 +16,7 @@ NostDB retains two local execution choices:
 
 | Mode | Process owning `.nostdb` | Client address | Intended use |
 |---|---|---|---|
-| Embedded | Current `nostdb` process | Filesystem path | Local scripts, Source Mode, single-process applications |
+| Embedded | Current `nostdb` process | Filesystem path | Local scripts, NDB-first human-readable projects, single-process applications |
 | Server | Long-running `nostd` | Server address plus Database name | Shared local service, containers, multiple clients, remote applications |
 
 In Server Mode, only `nostd` may open or mutate the managed `.nostdb` files. A CLI, driver, Skill, MCP adapter, backup tool, or application must use the database protocol or an explicit offline administration workflow while the daemon is stopped.
@@ -69,7 +69,8 @@ The catalog must be explicitly versioned and must atomically map names to stable
 - a data directory owned by another live daemon;
 - unknown future catalog or `.nostdb` versions;
 - inconsistent catalog/file mappings;
-- Source Mode materializations adopted without an explicit import or authority transition;
+- Databases with a human-readable-source synchronization baseline adopted without an
+  explicit import or authority transition;
 - partial restore or migration state that cannot be recovered deterministically.
 
 Creating, renaming, importing, restoring, or dropping a Database updates the catalog and storage through a journaled operation. The daemon must never leave a catalog entry pointing to an absent or partially replaced database.

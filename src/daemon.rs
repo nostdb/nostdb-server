@@ -158,9 +158,9 @@ impl DatabaseDaemon {
                     entry.name
                 ))
             })?;
-            if info.source_managed {
+            if info.nost {
                 return Err(ServerError::new(format!(
-                    "managed Database `{}` still has Source Mode authority; import it explicitly",
+                    "managed Database `{}` still has a human-readable-source synchronization baseline; import it explicitly",
                     entry.name
                 )));
             }
