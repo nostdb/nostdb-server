@@ -638,7 +638,7 @@ async fn named_databases_survive_restart_snapshot_logical_import_and_exclusive_o
         .data_directory
         .join("databases")
         .join(&first.id)
-        .join("database.ndb");
+        .join("database.nostdb");
     let direct = match nostdb_engine::EmbeddedDatabase::open(&managed_path) {
         Ok(_) => panic!("Embedded Mode opened daemon-owned storage"),
         Err(error) => error,

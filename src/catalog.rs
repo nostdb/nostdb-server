@@ -298,7 +298,7 @@ fn validate_catalog(catalog: &Catalog) -> Result<(), ServerError> {
 fn validate_storage(root: &Path, catalog: &Catalog) -> Result<(), ServerError> {
     for database in &catalog.databases {
         let directory = root.join("databases").join(&database.id);
-        let path = directory.join("database.ndb");
+        let path = directory.join("database.nostdb");
         if !directory.is_dir() || !path.is_file() {
             return Err(ServerError::new(format!(
                 "catalog Database `{}` has missing managed storage; recovery is required",
@@ -520,7 +520,7 @@ fn read_catalog(path: &Path) -> Result<Catalog, ServerError> {
 }
 
 fn database_path(root: &Path, id: &str) -> PathBuf {
-    root.join("databases").join(id).join("database.ndb")
+    root.join("databases").join(id).join("database.nostdb")
 }
 
 fn remove_if_exists(path: &Path) -> Result<(), ServerError> {

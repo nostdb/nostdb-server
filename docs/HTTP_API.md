@@ -5,7 +5,7 @@ Status: implemented transitional evaluation transport.
 This document defines the currently implemented HTTP protocol version 1. It is retained for exact regression coverage and the current thin MCP adapter, but it is not the NostDB database connection protocol and must not be treated as an application REST API platform. The installable daemon contract is defined in [DATABASE_SERVER.md](DATABASE_SERVER.md), and new CLI/driver framing is defined in [DATABASE_PROTOCOL.md](DATABASE_PROTOCOL.md).
 
 The HTTP protocol version,
-`.nostdb` language version, and `.ndb` format version are independent.
+`.nost` language version, and `.nostdb` format version are independent.
 
 ## Authentication and errors
 
@@ -102,8 +102,8 @@ These endpoints expose no source text, snapshot bytes, or mutation operation.
 
 ### Snapshot boundary
 
-`GET /v1/admin/snapshot` returns the authoritative `.ndb` bytes.
-`PUT /v1/admin/snapshot` accepts an `.ndb` snapshot up to the separately
+`GET /v1/admin/snapshot` returns the authoritative `.nostdb` bytes.
+`PUT /v1/admin/snapshot` accepts an `.nostdb` snapshot up to the separately
 configured snapshot-body limit. The server writes it to an isolated temporary
 path, opens it through the public Engine compatibility gate, and verifies its
 integrity before taking the live database lock. Only then does it replace and
@@ -111,7 +111,7 @@ reopen the live database. An incompatible or corrupt upload leaves the live
 database untouched.
 
 Snapshots are physical and format-specific. Version 1 accepts only the exact
-`.ndb` format supported by the running Core.
+`.nostdb` format supported by the running Core.
 
 ### Logical boundary
 
@@ -124,7 +124,7 @@ Snapshots are physical and format-specific. Version 1 accepts only the exact
   "config": "language_version = 1\n...",
   "modules": [
     {
-      "path": "modules/00000000-0000-0000-0000-000000000001.nostdb",
+      "path": "modules/00000000-0000-0000-0000-000000000001.nost",
       "stable_module_id": "00000000-0000-0000-0000-000000000001",
       "source": "module ..."
     }
@@ -140,5 +140,5 @@ authority before installing it. Invalid configuration, sources, imports,
 constraints, or unrepresentable logical export state are rejected without
 changing the live database.
 
-Logical packages are portable source representations. They are not `.ndb`
+Logical packages are portable source representations. They are not `.nostdb`
 snapshots and do not promise preservation of physical internal IDs.

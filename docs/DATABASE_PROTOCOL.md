@@ -1,6 +1,6 @@
 # NostDB database protocol version 1
 
-Status: implemented preview protocol; compatibility is governed independently from the HTTP compatibility adapter, `.nostdb`, `.ndb`, catalog, and package versions.
+Status: implemented preview protocol; compatibility is governed independently from the HTTP compatibility adapter, `.nost`, `.nostdb`, catalog, and package versions.
 
 ## Transport and framing
 
@@ -127,7 +127,7 @@ All operations below require `admin`:
 | `database_inspect(database)` | `database_info` | format, generation, checksum, health, and counts |
 | `database_rename(database,new_name)` | `database_renamed` | stable Database ID is unchanged |
 | `database_drop(database,confirm_name)` | `database_dropped` | confirmation must exactly equal the current name |
-| `logical_export(database)` | `logical_package` | portable versioned `.nostdb` package |
+| `logical_export(database)` | `logical_package` | portable versioned `.nost` package |
 | `logical_import(database,package)` | `logical_imported` | isolated Core compile, validate, then replace |
 
 Create, rename, and drop use the versioned catalog lifecycle journal. A drop moves closed storage out of the active tree only after the catalog transition. Startup completes or rolls back a journal before accepting connections.

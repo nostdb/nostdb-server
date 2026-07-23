@@ -138,7 +138,7 @@ pub enum ClientRequest {
     SnapshotRestoreCommit,
     /// Discards an incomplete snapshot upload.
     SnapshotRestoreAbort,
-    /// Exports the portable logical `.nostdb` package.
+    /// Exports the portable logical `.nost` package.
     LogicalExport {
         /// Catalog name to export.
         database: String,
@@ -272,7 +272,7 @@ pub enum ServerResponse {
     },
     /// Confirms a logical package import.
     LogicalImported {
-        /// Number of `.nostdb` modules imported.
+        /// Number of `.nost` modules imported.
         modules: u64,
     },
     /// Stable typed failure. The connection remains usable unless the protocol closes it.
@@ -379,7 +379,7 @@ pub struct DatabaseDetails {
     /// Catalog summary.
     #[serde(flatten)]
     pub summary: DatabaseSummary,
-    /// Independent `.ndb` format version.
+    /// Independent `.nostdb` format version.
     pub ndb_format_version: u32,
     /// Backend schema revision.
     pub schema_revision: u32,

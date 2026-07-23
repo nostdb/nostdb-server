@@ -92,7 +92,7 @@ const forbidden = [
   "nostdb-storage",
   "writeFileSync",
   "writeFile",
-  ".ndb",
+  ".nostdb",
   "npm publish",
 ];
 for (const file of runtimeFiles) {

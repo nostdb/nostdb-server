@@ -32,7 +32,7 @@ use tower_http::trace::TraceLayer;
 /// Runtime configuration for one server process.
 #[derive(Clone, Debug)]
 pub struct ServerConfig {
-    /// Path to the authoritative server-mode `.ndb` database.
+    /// Path to the authoritative server-mode `.nostdb` database.
     pub database_path: PathBuf,
     /// Required bearer API key. Empty keys are rejected.
     pub api_key: String,

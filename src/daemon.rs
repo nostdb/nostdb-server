@@ -860,8 +860,8 @@ fn restore_snapshot_with_operations(
         .path
         .parent()
         .ok_or_else(|| internal("managed Database path has no parent"))?;
-    let candidate = directory.join("database.ndb.restore-candidate");
-    let backup = directory.join("database.ndb.restore-backup");
+    let candidate = directory.join("database.nostdb.restore-candidate");
+    let backup = directory.join("database.nostdb.restore-backup");
     let journal = directory.join("restore-operation");
     cleanup_unjournaled_restore_candidate(directory).map_err(internal)?;
     for path in [&candidate, &backup, &journal] {
@@ -1142,9 +1142,9 @@ fn recover_snapshot_operations(root: &Path) -> Result<(), ServerError> {
                 "restore journal identity or version is invalid; operator recovery is required",
             ));
         }
-        let target = directory.join("database.ndb");
-        let candidate = directory.join("database.ndb.restore-candidate");
-        let backup = directory.join("database.ndb.restore-backup");
+        let target = directory.join("database.nostdb");
+        let candidate = directory.join("database.nostdb.restore-candidate");
+        let backup = directory.join("database.nostdb.restore-backup");
         if journal.stage != "prepared" {
             return Err(ServerError::new(
                 "restore journal stage is invalid; operator recovery is required",
@@ -1238,9 +1238,9 @@ fn validate_recovered_snapshot(path: &Path) -> Result<(), ServerError> {
 }
 
 fn cleanup_unjournaled_restore_candidate(directory: &Path) -> Result<(), ServerError> {
-    let target = directory.join("database.ndb");
-    let candidate = directory.join("database.ndb.restore-candidate");
-    let backup = directory.join("database.ndb.restore-backup");
+    let target = directory.join("database.nostdb");
+    let candidate = directory.join("database.nostdb.restore-candidate");
+    let backup = directory.join("database.nostdb.restore-backup");
     let journal = directory.join("restore-operation");
     if journal.exists() || (!candidate.exists() && !backup.exists()) {
         return Ok(());
@@ -1271,7 +1271,7 @@ fn import_logical(
     let source_root = parent.join(format!("logical-import-{}", Uuid::new_v4()));
     fs::create_dir(&source_root).map_err(internal)?;
     let result = (|| {
-        fs::write(source_root.join("nostdb.toml"), package.config).map_err(internal)?;
+        fs::write(source_root.join("nostdb.json"), package.config).map_err(internal)?;
         let config = nostdb_engine::ProjectConfig::load(&source_root)
             .map_err(|error| ProtocolFailure::new(ErrorCode::QueryError, error.to_string()))?;
         let mut seen = std::collections::BTreeSet::new();
@@ -1293,7 +1293,7 @@ fn import_logical(
                 return Err(ProtocolFailure::new(
                     ErrorCode::QueryError,
                     format!(
-                        "stable Module ID does not match nostdb.toml for {}",
+                        "stable Module ID does not match nostdb.json for {}",
                         module.path
                     ),
                 ));
@@ -1304,7 +1304,7 @@ fn import_logical(
             }
             fs::write(path, module.source).map_err(internal)?;
         }
-        let candidate = source_root.join("candidate.ndb");
+        let candidate = source_root.join("candidate.nostdb");
         nostdb_engine::Synchronizer::default()
             .sync(&source_root, &candidate)
             .map_err(|error| ProtocolFailure::new(ErrorCode::QueryError, error.to_string()))?;
@@ -1354,7 +1354,7 @@ fn safe_module_path(value: &str) -> Result<PathBuf, ProtocolFailure> {
         || path
             .components()
             .any(|component| !matches!(component, Component::Normal(_)))
-        || path.extension().and_then(|extension| extension.to_str()) != Some("nostdb")
+        || path.extension().and_then(|extension| extension.to_str()) != Some("nost")
     {
         return Err(ProtocolFailure::new(
             ErrorCode::QueryError,
@@ -1593,8 +1593,8 @@ mod tests {
     fn startup_recovery_removes_an_unjournaled_restore_candidate() {
         let root = test_root("restore-orphan-candidate");
         let directory = root.join("databases/database-id");
-        let target = directory.join("database.ndb");
-        let candidate = directory.join("database.ndb.restore-candidate");
+        let target = directory.join("database.nostdb");
+        let candidate = directory.join("database.nostdb.restore-candidate");
         let mut sidecar = candidate.as_os_str().to_os_string();
         sidecar.push(".lock");
         let sidecar = PathBuf::from(sidecar);
@@ -1633,10 +1633,10 @@ mod tests {
         let root = test_root("restore-checkpoint-failure");
         let directory = root.join("databases/database-id");
         fs::create_dir_all(&directory).expect("Database directory creates");
-        let path = directory.join("database.ndb");
+        let path = directory.join("database.nostdb");
         let database = EmbeddedDatabase::create(&path).expect("live Database creates");
         let handle = ManagedDatabase::new("database-id".to_owned(), path, database);
-        let bytes = snapshot_bytes(&root, "snapshot.ndb");
+        let bytes = snapshot_bytes(&root, "snapshot.nostdb");
         let injected =
             ProtocolFailure::retryable(ErrorCode::DatabaseBusy, "injected live checkpoint failure");
 
@@ -1658,7 +1658,7 @@ mod tests {
                 .is_some(),
             "live Database is immediately restored to the handle"
         );
-        assert!(!directory.join("database.ndb.restore-candidate").exists());
+        assert!(!directory.join("database.nostdb.restore-candidate").exists());
         assert!(!directory.join("restore-operation").exists());
         drop(handle);
         fs::remove_dir_all(root).expect("test directory removes");
@@ -1669,12 +1669,12 @@ mod tests {
         let root = test_root("restore-committed-cleanup-failure");
         let directory = root.join("databases/database-id");
         fs::create_dir_all(&directory).expect("Database directory creates");
-        let path = directory.join("database.ndb");
-        let backup = directory.join("database.ndb.restore-backup");
+        let path = directory.join("database.nostdb");
+        let backup = directory.join("database.nostdb.restore-backup");
         let journal = directory.join("restore-operation");
         let database = EmbeddedDatabase::create(&path).expect("live Database creates");
         let handle = ManagedDatabase::new("database-id".to_owned(), path, database);
-        let bytes = snapshot_bytes(&root, "snapshot.ndb");
+        let bytes = snapshot_bytes(&root, "snapshot.nostdb");
 
         restore_snapshot_with_operations(
             &handle,
@@ -1718,8 +1718,8 @@ mod tests {
     fn startup_recovery_rolls_an_invalid_installed_snapshot_back_to_the_backup() {
         let root = test_root("restore-invalid-installed-target");
         let directory = root.join("databases/database-id");
-        let target = directory.join("database.ndb");
-        let backup = directory.join("database.ndb.restore-backup");
+        let target = directory.join("database.nostdb");
+        let backup = directory.join("database.nostdb.restore-backup");
         let journal = directory.join("restore-operation");
         fs::create_dir_all(&directory).expect("Database directory creates");
         let mut original = EmbeddedDatabase::create(&backup).expect("backup Database creates");
@@ -1740,8 +1740,8 @@ mod tests {
     fn startup_recovery_retains_backup_when_an_invalid_target_cannot_be_removed() {
         let root = test_root("restore-unremovable-installed-target");
         let directory = root.join("databases/database-id");
-        let target = directory.join("database.ndb");
-        let backup = directory.join("database.ndb.restore-backup");
+        let target = directory.join("database.nostdb");
+        let backup = directory.join("database.nostdb.restore-backup");
         let journal = directory.join("restore-operation");
         fs::create_dir_all(&target).expect("invalid target directory creates");
         let mut original = EmbeddedDatabase::create(&backup).expect("backup Database creates");
@@ -1764,13 +1764,13 @@ mod tests {
         let root = test_root("restore-install-rollback-failure");
         let directory = root.join("databases/database-id");
         fs::create_dir_all(&directory).expect("Database directory creates");
-        let path = directory.join("database.ndb");
-        let candidate = directory.join("database.ndb.restore-candidate");
-        let backup = directory.join("database.ndb.restore-backup");
+        let path = directory.join("database.nostdb");
+        let candidate = directory.join("database.nostdb.restore-candidate");
+        let backup = directory.join("database.nostdb.restore-backup");
         let journal = directory.join("restore-operation");
         let database = EmbeddedDatabase::create(&path).expect("live Database creates");
         let handle = ManagedDatabase::new("database-id".to_owned(), path.clone(), database);
-        let bytes = snapshot_bytes(&root, "snapshot.ndb");
+        let bytes = snapshot_bytes(&root, "snapshot.nostdb");
         let mut rename_calls = 0_u8;
 
         let error = restore_snapshot_with_operations(
@@ -1811,7 +1811,7 @@ mod tests {
     #[test]
     fn failed_logical_import_removes_its_temporary_directory() {
         let root = test_root("logical-import-cleanup");
-        let path = root.join("database.ndb");
+        let path = root.join("database.nostdb");
         fs::create_dir(&root).expect("test directory creates");
         let database = EmbeddedDatabase::create(&path).expect("Database creates");
         let handle = ManagedDatabase::new("database-id".to_owned(), path, database);

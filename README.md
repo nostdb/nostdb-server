@@ -9,7 +9,7 @@ Read [PREVIEW.md](PREVIEW.md), [SECURITY.md](SECURITY.md), and
 
 The implemented product path is `nostd`: a long-running process that owns a versioned data directory and catalog, stores one or more named Databases, and accepts connections from the `nostdb` CLI and thin clients. It runs as the same binary in a foreground process, native operating-system service candidate, or Docker container with persistent config and data volumes. Read the [database server contract](docs/DATABASE_SERVER.md) and exact [database protocol](docs/DATABASE_PROTOCOL.md).
 
-The old `nostdb-server` binary still opens one explicit `.ndb` and exposes HTTP protocol version 1 for current MCP compatibility. It is transitional, separately versioned, and must not be presented as the database product or as an application REST API platform.
+The old `nostdb-server` binary still opens one explicit `.nostdb` and exposes HTTP protocol version 1 for current MCP compatibility. It is transitional, separately versioned, and must not be presented as the database product or as an application REST API platform.
 
 ## Package-manager targets
 
@@ -93,7 +93,7 @@ The CLI also supports Database list/inspect/rename/guarded drop, physical snapsh
 
 ## Data and deployment candidates
 
-The managed tree uses immutable UUID Database IDs internally and never exposes paths to clients. Catalog writes and create/rename/drop operations are journaled. Snapshot restore validates a candidate through Core and uses a recovery journal plus rollback backup. Core sidecar locks prevent a second daemon, Embedded client, or Source synchronizer from opening the same `.ndb` while it is owned.
+The managed tree uses immutable UUID Database IDs internally and never exposes paths to clients. Catalog writes and create/rename/drop operations are journaled. Snapshot restore validates a candidate through Core and uses a recovery journal plus rollback backup. Core sidecar locks prevent a second daemon, Embedded client, or Source synchronizer from opening the same `.nostdb` while it is owned.
 
 Candidate definitions are under [distribution](distribution/README.md):
 
@@ -122,7 +122,7 @@ Run the compatibility binary explicitly:
 
 ```bash
 NOSTDB_API_KEY='replace-me' cargo run --bin nostdb-server -- \
-  --database ./compatibility.ndb \
+  --database ./compatibility.nostdb \
   --listen 127.0.0.1:8787
 ```
 
@@ -140,8 +140,8 @@ The complete request, response, session, limit, and import/export contract is in
 | `POST /v1/sessions/{id}/query` | Execute immediately or queue in the active transaction |
 | `POST /v1/sessions/{id}/commit` | Execute and commit the complete queue atomically |
 | `POST /v1/sessions/{id}/rollback` | Discard the queue |
-| `GET`, `PUT /v1/admin/snapshot` | Export or compatibility-check and restore `.ndb` |
-| `GET`, `PUT /v1/admin/logical` | Export or validate and import a versioned `.nostdb` package |
+| `GET`, `PUT /v1/admin/snapshot` | Export or compatibility-check and restore `.nostdb` |
+| `GET`, `PUT /v1/admin/logical` | Export or validate and import a versioned `.nost` package |
 | `GET /metrics` | Return operational counters |
 
 Example query:
@@ -153,7 +153,7 @@ curl -sS http://127.0.0.1:8787/v1/query \
   --data '{"query":"MATCH (n) RETURN n","stream":true,"read_only":true}'
 ```
 
-Snapshot restore opens and integrity-checks the uploaded Format 0 artifact before taking the live database lock or replacing the current file. Logical import uses a versioned package containing `nostdb.toml` plus normalized module paths and converts the synchronized candidate to Server/NDB authority explicitly.
+Snapshot restore opens and integrity-checks the uploaded Format 0 artifact before taking the live database lock or replacing the current file. Logical import uses a versioned package containing `nostdb.json` plus normalized module paths and converts the synchronized candidate to Server/NDB authority explicitly.
 
 ## Verify
 

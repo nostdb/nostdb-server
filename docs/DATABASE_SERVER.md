@@ -6,7 +6,7 @@ Status: Implemented source-preview architecture; release, production hardening, 
 
 `nostd` is an installable, long-running, single-node database server. It owns one data directory, stores and recovers one or more named NostDB databases, and accepts connections from the `nostdb` CLI, official drivers, and thin adapters such as MCP.
 
-It is not an application REST API server. Applications do not integrate by opening `.ndb` files or by depending on resource-oriented HTTP endpoints. They connect through the versioned NostDB database protocol and select a logical Database name.
+It is not an application REST API server. Applications do not integrate by opening `.nostdb` files or by depending on resource-oriented HTTP endpoints. They connect through the versioned NostDB database protocol and select a logical Database name.
 
 The repository is named `nostdb-server`; the daemon executable is `nostd` so service managers and operators can distinguish it from the `nostdb` client.
 
@@ -14,12 +14,12 @@ The repository is named `nostdb-server`; the daemon executable is `nostd` so ser
 
 NostDB retains two local execution choices:
 
-| Mode | Process owning `.ndb` | Client address | Intended use |
+| Mode | Process owning `.nostdb` | Client address | Intended use |
 |---|---|---|---|
 | Embedded | Current `nostdb` process | Filesystem path | Local scripts, Source Mode, single-process applications |
 | Server | Long-running `nostd` | Server address plus Database name | Shared local service, containers, multiple clients, remote applications |
 
-In Server Mode, only `nostd` may open or mutate the managed `.ndb` files. A CLI, driver, Skill, MCP adapter, backup tool, or application must use the database protocol or an explicit offline administration workflow while the daemon is stopped.
+In Server Mode, only `nostd` may open or mutate the managed `.nostdb` files. A CLI, driver, Skill, MCP adapter, backup tool, or application must use the database protocol or an explicit offline administration workflow while the daemon is stopped.
 
 ## Operator surface
 
@@ -55,7 +55,7 @@ data-directory/
 ├─ server-state        # versioned daemon/catalog metadata
 ├─ databases/
 │  ├─ <stable-database-id>/
-│  │  ├─ database.ndb
+│  │  ├─ database.nostdb
 │  │  └─ runtime sidecars while open
 │  └─ ...
 ├─ snapshots/          # optional operator-managed staging
@@ -67,7 +67,7 @@ This tree describes ownership, not a stable on-disk layout. Internal filenames m
 The catalog must be explicitly versioned and must atomically map names to stable IDs and database state. Startup refuses:
 
 - a data directory owned by another live daemon;
-- unknown future catalog or `.ndb` versions;
+- unknown future catalog or `.nostdb` versions;
 - inconsistent catalog/file mappings;
 - Source Mode materializations adopted without an explicit import or authority transition;
 - partial restore or migration state that cannot be recovered deterministically.
@@ -120,11 +120,11 @@ The public network surface is a stateful, versioned database connection protocol
 - administrative capabilities separated from ordinary query permission;
 - liveness/readiness without exposing catalog or data.
 
-The protocol version remains independent from the `.nostdb` language version, `.ndb` format version, server catalog version, and binary package version.
+The protocol version remains independent from the `.nost` language version, `.nostdb` format version, server catalog version, and binary package version.
 
 Exact version 1 framing, connection state, messages, roles, and errors are specified in [DATABASE_PROTOCOL.md](DATABASE_PROTOCOL.md). The current HTTP protocol version 1 is a transitional evaluation transport used by existing tests and MCP. It is not the product identity and creates no compatibility relationship with database protocol version 1. The legacy HTTP binary remains an optional compatibility adapter and does not define new database semantics.
 
-All query classification, planning, execution, transactions, validation, and storage behavior continue to come from public `nostdb-engine` APIs. The daemon and protocol adapter must not implement a second query engine or `.ndb` writer.
+All query classification, planning, execution, transactions, validation, and storage behavior continue to come from public `nostdb-engine` APIs. The daemon and protocol adapter must not implement a second query engine or `.nostdb` writer.
 
 ## Database lifecycle
 
@@ -133,7 +133,7 @@ The daemon owns these lifecycle operations:
 - create and list named Databases;
 - report Database health, format, generation, checksum, and authority;
 - rename a Database without changing its stable ID;
-- import a logical `.nostdb` package through an isolated synchronization candidate;
+- import a logical `.nost` package through an isolated synchronization candidate;
 - restore an exact-compatible physical snapshot after isolated integrity validation;
 - create a consistent snapshot without exposing live mutable files;
 - close, migrate, and reopen a Database with rollback on failure;
@@ -229,7 +229,7 @@ The equivalent unpublished Compose candidate is `compose.yaml`. No image is curr
 - a hosted control plane;
 - clustering, replication, sharding, or automatic failover;
 - PostgreSQL wire, SQL, Neo4j Bolt, or full openCypher compatibility claims;
-- direct client access to managed `.ndb` files;
+- direct client access to managed `.nostdb` files;
 - arbitrary user-selected storage paths in network requests;
 - online cross-version storage migration without a verified rollback artifact;
 - treating a health or metrics endpoint as the database client protocol.
@@ -241,7 +241,7 @@ The database-daemon Stage is complete only when evidence proves:
 1. A fresh native installation can initialize a data directory, start `nostd`, create a named Database, connect with `nostdb`, write/query it, restart the daemon, and observe the committed data.
 2. A Docker candidate performs the same lifecycle with authoritative data on a mounted volume and preserves it across container replacement.
 3. At least two named Databases remain isolated across concurrent clients, restart, snapshot, and restore operations.
-4. Managed `.ndb` files are exclusively daemon-owned while running; direct or second-daemon opens fail safely.
+4. Managed `.nostdb` files are exclusively daemon-owned while running; direct or second-daemon opens fail safely.
 5. Protocol negotiation, authentication, Database selection, queries, streaming, transactions, cancellation, limits, and typed errors have exact client/server integration tests.
 6. Native service definitions run the same binary/config/data-directory contract and default to local-only access.
 7. The existing HTTP protocol is either an explicitly optional compatibility adapter or removed after MCP/clients migrate; it is not documented as the primary product surface.

@@ -555,7 +555,7 @@ dependencies = [
  "nostdb-parser",
  "nostdb-storage",
  "nostdb-syntax",
- "toml",
+ "serde_json",
 ]
 
 [[package]]

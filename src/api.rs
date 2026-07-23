@@ -680,7 +680,7 @@ async fn export_snapshot(State(state): State<AppState>) -> Result<Response, ApiE
     let mut response = Response::new(Body::from(bytes));
     response.headers_mut().insert(
         header::CONTENT_TYPE,
-        HeaderValue::from_static("application/vnd.nostdb.ndb"),
+        HeaderValue::from_static("application/vnd.nostdb.database"),
     );
     response
         .headers_mut()
@@ -894,7 +894,7 @@ fn import_logical_package(state: &AppState, package: LogicalPackageBody) -> Resu
     let directory = parent.join(format!(".nostdb-logical-import-{}", Uuid::new_v4()));
     fs::create_dir(&directory).map_err(|error| ApiError::internal(error.to_string()))?;
     let result = (|| {
-        fs::write(directory.join("nostdb.toml"), package.config)
+        fs::write(directory.join("nostdb.json"), package.config)
             .map_err(|error| ApiError::internal(error.to_string()))?;
         let config = ProjectConfig::load(&directory).map_err(|error| {
             ApiError::new(
@@ -919,7 +919,7 @@ fn import_logical_package(state: &AppState, package: LogicalPackageBody) -> Resu
                 })?;
             if config.module_id(&path) != Some(module_id) {
                 return Err(ApiError::bad_request(format!(
-                    "stable_module_id does not match nostdb.toml for {}",
+                    "stable_module_id does not match nostdb.json for {}",
                     module.path
                 )));
             }
@@ -931,7 +931,7 @@ fn import_logical_package(state: &AppState, package: LogicalPackageBody) -> Resu
             fs::write(target, module.source)
                 .map_err(|error| ApiError::internal(error.to_string()))?;
         }
-        let candidate_path = directory.join("candidate.ndb");
+        let candidate_path = directory.join("candidate.nostdb");
         Synchronizer::default()
             .sync(&directory, &candidate_path)
             .map_err(|error| {
@@ -970,7 +970,7 @@ fn safe_relative(value: &str) -> Result<PathBuf, ApiError> {
         || path
             .components()
             .any(|component| !matches!(component, Component::Normal(_)))
-        || path.extension().and_then(|value| value.to_str()) != Some("nostdb")
+        || path.extension().and_then(|value| value.to_str()) != Some("nost")
     {
         return Err(ApiError::bad_request(format!(
             "invalid logical module path `{value}`"

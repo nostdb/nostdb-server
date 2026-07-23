@@ -26,7 +26,7 @@ impl TestServer {
             SEQUENCE.fetch_add(1, Ordering::Relaxed)
         ));
         std::fs::create_dir(&directory).expect("temporary directory creates");
-        let database = directory.join("graph.ndb");
+        let database = directory.join("graph.nostdb");
         let mut config = ServerConfig::new(database.clone(), API_KEY.to_owned());
         configure(&mut config);
         let state = AppState::new(config).expect("server state initializes");
@@ -467,7 +467,7 @@ async fn snapshot_restore_validates_compatibility_before_replacing_live_database
     assert_eq!(exported.status, StatusCode::OK);
     assert_eq!(
         exported.content_type.as_deref(),
-        Some("application/vnd.nostdb.ndb")
+        Some("application/vnd.nostdb.database")
     );
 
     let incompatible = server
@@ -546,7 +546,7 @@ async fn snapshot_restore_validates_compatibility_before_replacing_live_database
     assert_names(&server, &["Before"]).await;
 
     let mut unsafe_package = package;
-    unsafe_package["modules"][0]["path"] = json!("../outside.nostdb");
+    unsafe_package["modules"][0]["path"] = json!("../outside.nost");
     let rejected = server
         .request(
             "PUT",

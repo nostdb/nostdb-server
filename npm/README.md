@@ -10,7 +10,7 @@ nostd --version
 nostdb --version
 ```
 
-The JavaScript wrapper contains no Core, query, storage, or `.ndb` implementation. It validates the exact OS/CPU native Server package and delegates process execution through the matching CLI launcher's shell-free process boundary. It has no lifecycle downloader and does not initialize or start a daemon during installation.
+The JavaScript wrapper contains no Core, query, storage, or `.nostdb` implementation. It validates the exact OS/CPU native Server package and delegates process execution through the matching CLI launcher's shell-free process boundary. It has no lifecycle downloader and does not initialize or start a daemon during installation.
 
 Tests and candidate scripts in this directory never publish by themselves. See
 the repository [distribution contract](../docs/DATABASE_SERVER.md).
