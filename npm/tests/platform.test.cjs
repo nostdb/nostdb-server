@@ -50,7 +50,7 @@ test("requires an exact-version Server package and executable", (context) => {
   const manifestPath = path.join(packageRoot, "package.json");
   fs.writeFileSync(
     manifestPath,
-    JSON.stringify({ name: "@nostdb/server-darwin-arm64", version: "0.0.1" }),
+    JSON.stringify({ name: "@nostdb/server-darwin-arm64", version: "0.0.2" }),
   );
   const binary = path.join(binaryDirectory, "nostd");
   fs.writeFileSync(binary, "fixture");
@@ -62,7 +62,7 @@ test("requires an exact-version Server package and executable", (context) => {
     resolveBinary({
       platform: "darwin",
       arch: "arm64",
-      version: "0.0.1",
+      version: "0.0.2",
       resolvePackage,
     }),
     binary,

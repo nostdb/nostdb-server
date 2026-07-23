@@ -20,11 +20,11 @@ test("requires the exact matching CLI package and API", (context) => {
   const expected = { launchBinary() {}, run() {} };
   fs.writeFileSync(
     manifestPath,
-    JSON.stringify({ name: "@nostdb/cli", version: "0.0.1" }),
+    JSON.stringify({ name: "@nostdb/cli", version: "0.0.2" }),
   );
   assert.equal(
     resolveCliLauncher({
-      version: "0.0.1",
+      version: "0.0.2",
       resolvePackage(request) {
         assert.equal(request, "@nostdb/cli/package.json");
         return manifestPath;
@@ -63,9 +63,9 @@ test("delegates nostd and nostdb without changing arguments", () => {
   const launchOptions = { stdio: "inherit" };
   assert.equal(
     runDaemon(arguments_, {
-      version: "0.0.1",
+      version: "0.0.2",
       resolveBinary: ({ version }) => {
-        assert.equal(version, "0.0.1");
+        assert.equal(version, "0.0.2");
         return "/native/nostd";
       },
       cliLauncher,
@@ -75,7 +75,7 @@ test("delegates nostd and nostdb without changing arguments", () => {
     "daemon-child",
   );
   assert.equal(
-    runCli(arguments_, { version: "0.0.1", cliLauncher }),
+    runCli(arguments_, { version: "0.0.2", cliLauncher }),
     "cli-child",
   );
   assert.deepEqual(calls, [

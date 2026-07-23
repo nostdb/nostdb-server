@@ -1,7 +1,7 @@
 # Server preview status
 
 The Server is source-available SSPL-1.0 single-node evaluation software. Its
-unsupported npm `0.0.1` packages are published, while the other deployment
+unsupported npm `0.0.2` packages are published, while the other deployment
 candidates remain unpublished; there is no supported release, registered
 service, published image, or hosted service.
 

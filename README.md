@@ -26,7 +26,7 @@ nostd --version
 nostdb --version
 ```
 
-`@nostdb/server@0.0.1` and its six native packages are published under
+`@nostdb/server@0.0.2` and its six native packages are published under
 `latest` and `next`; the Homebrew channel is not published. The wrapper selects
 one exact native Server package, depends on the exact matching `@nostdb/cli`,
 contains no lifecycle downloader, and does not initialize or start the daemon
@@ -103,7 +103,7 @@ Candidate definitions are under [distribution](distribution/README.md):
 - Windows foreground execution; Service Control Manager integration and protected credential ACL installation remain explicitly deferred;
 - [Dockerfile](Dockerfile) and [compose.yaml](compose.yaml) with separate config and authoritative data volumes.
 
-The npm `0.0.1` packages are published but unsupported. Homebrew, systemd,
+The npm `0.0.2` packages are published but unsupported. Homebrew, systemd,
 Windows Service, Docker, and direct-archive material remain unpublished review
 candidates rather than supported installers or registered services.
 

@@ -1,7 +1,7 @@
 # `@nostdb/server` candidate launcher
 
-The published SSPL-1.0 `@nostdb/server@0.0.1` package installs the native
-`nostd` database daemon and the exact matching `@nostdb/cli@0.0.1`. One global
+The published SSPL-1.0 `@nostdb/server@0.0.2` package installs the native
+`nostd` database daemon and the exact matching `@nostdb/cli@0.0.2`. One global
 install exposes both commands:
 
 ```bash
