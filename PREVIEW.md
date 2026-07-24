@@ -10,7 +10,7 @@ service, published image, or hosted service.
 - Homebrew, systemd, Windows Service, Docker, and combined archive files are review candidates only. They have not been published, installed on a production host, or signed with production credentials.
 - The single-file HTTP binary is transitional MCP compatibility behavior, not the product identity or an application API platform. Its API-key and `/healthz` rules are separate from the database protocol.
 - Transactions and connections are bounded; clustering, replication, automatic failover, and HA are absent.
-- Snapshot Format 0 compatibility is exact/experimental; logical packages are distinct.
+- Snapshot native Format 1 compatibility is exact/experimental; logical packages are distinct.
 - No production SLA, backup service, non-npm publication, or external
   contribution intake exists.
 

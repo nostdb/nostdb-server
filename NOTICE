@@ -11,8 +11,6 @@ This software uses third-party Rust crates under permissive licenses, including:
 
 - Tokio, Axum, Tower HTTP, tracing, tracing-subscriber, and UUID under MIT terms.
 - Serde, serde_json, and futures utilities under MIT or Apache-2.0 terms.
-- rusqlite/libsqlite3-sys and their transitive dependencies through nostdb-engine;
-  bundled SQLite is in the public domain and the Rust bindings use permissive terms.
 
 Exact per-package license texts/SBOM and final attribution/legal review remain
 release blockers before distribution.

@@ -4,7 +4,7 @@ use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Component, Path as FsPath, PathBuf};
 use std::sync::atomic::Ordering;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use axum::body::{Body, Bytes};
 use axum::extract::rejection::QueryRejection;
@@ -345,7 +345,11 @@ async fn execute_one(
     let cancellation = CancellationToken::new();
     let worker_cancellation = cancellation.clone();
     let database = state.database.clone();
+    let deadline = Instant::now().checked_add(timeout);
     let mut worker = tokio::task::spawn_blocking(move || {
+        if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+            return Err("query execution cancelled".to_owned());
+        }
         let mut guard = database
             .lock()
             .map_err(|_| "database lock is poisoned".to_owned())?;
@@ -358,6 +362,9 @@ async fn execute_one(
             .map_err(|error| error.to_string())
     });
     match tokio::time::timeout(timeout, &mut worker).await {
+        Ok(Ok(Err(error))) if error.contains("query execution cancelled") => {
+            timeout_error(state, "query exceeded the configured wall-clock timeout")
+        }
         Ok(result) => join_result(result).inspect_err(|_| {
             state.metrics.query_errors.fetch_add(1, Ordering::Relaxed);
         }),
@@ -382,7 +389,12 @@ async fn execute_batch(
     let worker_cancellation = cancellation.clone();
     let database = state.database.clone();
     let limits = state.config.query_limits;
+    let timeout = state.config.query_timeout;
+    let deadline = Instant::now().checked_add(timeout);
     let mut worker = tokio::task::spawn_blocking(move || {
+        if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+            return Err("query execution cancelled".to_owned());
+        }
         let mut guard = database
             .lock()
             .map_err(|_| "database lock is poisoned".to_owned())?;
@@ -394,7 +406,11 @@ async fn execute_batch(
             .map_err(DatabaseFailure::from)
             .map_err(|error| error.to_string())
     });
-    match tokio::time::timeout(state.config.query_timeout, &mut worker).await {
+    match tokio::time::timeout(timeout, &mut worker).await {
+        Ok(Ok(Err(error))) if error.contains("query execution cancelled") => timeout_error(
+            state,
+            "transaction exceeded the configured wall-clock timeout",
+        ),
         Ok(result) => join_result(result).inspect_err(|_| {
             state.metrics.query_errors.fetch_add(1, Ordering::Relaxed);
         }),
@@ -421,18 +437,22 @@ async fn finish_timeout<T>(
         // timed out.
         Ok(Ok(value)) => Ok(value),
         Ok(Err(error)) if error.contains("query execution cancelled") => {
-            state.metrics.timeouts.fetch_add(1, Ordering::Relaxed);
-            Err(ApiError::new(
-                StatusCode::REQUEST_TIMEOUT,
-                "query_timeout",
-                message,
-            ))
+            timeout_error(state, message)
         }
         Ok(Err(error)) => Err(database_message(error)),
         Err(error) => Err(ApiError::internal(format!(
             "query worker failed after timeout: {error}"
         ))),
     }
+}
+
+fn timeout_error<T>(state: &AppState, message: &'static str) -> Result<T, ApiError> {
+    state.metrics.timeouts.fetch_add(1, Ordering::Relaxed);
+    Err(ApiError::new(
+        StatusCode::REQUEST_TIMEOUT,
+        "query_timeout",
+        message,
+    ))
 }
 
 fn join_result<T>(

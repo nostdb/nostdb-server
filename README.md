@@ -157,7 +157,7 @@ curl -sS http://127.0.0.1:8787/v1/query \
   --data '{"query":"MATCH (n) RETURN n","stream":true,"read_only":true}'
 ```
 
-Snapshot restore opens and integrity-checks the uploaded Format 0 artifact
+Snapshot restore opens and integrity-checks the uploaded native Format 1 artifact
 before taking the live database lock or replacing the current file. Logical
 import uses a versioned package containing complete
 `.nostdb/settings.json` text plus normalized `.nostdb/`-relative module paths,
