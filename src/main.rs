@@ -4,9 +4,8 @@
 //! argument parsing, output formats, and exit classes belong. This binary is the process that
 //! surface starts, and it takes only what a service manager needs.
 //!
-//! Increment 2 has no protocol loop, so `run` binds the endpoint, reports it, and exits rather
-//! than accepting connections. That is deliberate: a loop that accepted a connection and did
-//! nothing with it would look like a working daemon.
+//! `run` stays in the foreground, which is what a service manager and a debugging session both
+//! want. It serves connections until a client sends `shutdown`.
 
 use std::process::ExitCode;
 
@@ -41,9 +40,30 @@ The user-facing surface is `nostdb server ...`, which starts this process.
 
 fn run() -> ExitCode {
     match nostdb_server::start() {
-        Ok(nostdb_server::Started::Running { address, .. }) => {
+        Ok(nostdb_server::Started::Running {
+            address, listener, ..
+        }) => {
             println!("listening on {}", address.display());
-            ExitCode::SUCCESS
+            let catalog_path = match nostdb_server::catalog::Catalog::default_path() {
+                Ok(path) => path,
+                Err(error) => {
+                    eprintln!("nostdb-server: {error}");
+                    return ExitCode::FAILURE;
+                }
+            };
+            // The lock guard is still held by the caller's binding, so it outlives this loop and
+            // the one-instance rule holds for as long as the daemon runs.
+            match nostdb_server::accept_until_shutdown(
+                &listener,
+                &catalog_path,
+                nostdb_server::serve::Limits::default(),
+            ) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(error) => {
+                    eprintln!("nostdb-server: {error}");
+                    ExitCode::FAILURE
+                }
+            }
         }
         Ok(nostdb_server::Started::AlreadyRunning { address, code }) => {
             // Not a failure. Section 2.1 of the protocol contract makes a start that finds a
