@@ -22,7 +22,9 @@
 pub mod catalog;
 pub mod diagnostic;
 pub mod endpoint;
+pub mod frame;
 pub mod lock;
+pub mod message;
 
 use std::io;
 use std::path::PathBuf;
