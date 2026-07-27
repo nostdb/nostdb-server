@@ -625,9 +625,16 @@ fn the_accept_loop_serves_two_connections_at_once() {
     let (catalog_path, _) = fixture("concurrent");
 
     // A Unix socket path is bounded by SUN_LEN, about 104 bytes, and the scratch directory name
-    // used elsewhere here is already longer than that. A socket needs a short path, so this one is
-    // built directly under the temporary directory.
-    let address = std::env::temp_dir().join(format!("nsdb-{}.sock", std::process::id()));
+    // used elsewhere here is longer than that, so this needs a short one of its own.
+    //
+    // It must still be a directory this test owns. `bind` narrows the socket's parent to 0700,
+    // which is right when the parent is the daemon's own `~/.nostdb/run` and wrong when it is a
+    // shared temporary directory. Putting the socket directly in the temporary directory passed on
+    // macOS, where each user gets a private one, and failed on CI with `PermissionDenied` for
+    // trying to chmod a `/tmp` owned by root.
+    let directory = std::env::temp_dir().join(format!("nsdb{}", std::process::id()));
+    std::fs::create_dir_all(&directory).expect("short scratch directory");
+    let address = directory.join("s.sock");
     let _ = std::fs::remove_file(&address);
     let listener = nostdb_server::endpoint::bind(&address).expect("bound");
 
