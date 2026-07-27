@@ -726,3 +726,62 @@ fn open_on(stream: &mut UnixStream) -> String {
         .expect("session id")
         .to_owned()
 }
+
+/// A query that exceeds its timeout is stopped and reports the Engine's own code.
+///
+/// The timeout is enforced through cooperative cancellation in the Engine, not measured after the
+/// fact, so this asserts the query was *stopped*: the code comes from the Engine and the daemon
+/// adds none of its own.
+#[test]
+fn a_query_past_its_timeout_is_stopped() {
+    let (catalog_path, _) = fixture("timeout");
+    let limits = Limits {
+        query_timeout: std::time::Duration::from_nanos(1),
+        ..Limits::default()
+    };
+    let mut client = Client::connect(&catalog_path, limits);
+    assert_eq!(client.shake(vec![1])["message"], "welcome");
+    client.send(&json!({
+        "server_protocol_version": 1, "request_id": "open",
+        "operation": "open_session", "database": "work",
+    }));
+    let session = client.receive()["result"]["session_id"]
+        .as_str()
+        .expect("session")
+        .to_owned();
+
+    std::thread::sleep(std::time::Duration::from_millis(2));
+    client.send(&json!({
+        "server_protocol_version": 1, "request_id": "q1", "session_id": session,
+        "operation": "query", "database": "work",
+        "statement": "MATCH (n) RETURN n",
+    }));
+    let reply = client.receive();
+    assert_eq!(reply["outcome"], "error", "{reply}");
+    assert_eq!(
+        reply["diagnostics"][0]["code"], "QUERY_CANCELLED",
+        "the Engine's own code must be forwarded: {reply}"
+    );
+    assert!(
+        reply["diagnostics"][0]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("timeout"),
+        "the reply must name the limit that stopped it: {reply}"
+    );
+    client.finish();
+}
+
+/// A generous timeout does not stop an ordinary query.
+#[test]
+fn a_query_within_its_timeout_completes() {
+    let (catalog_path, _) = fixture("timeout-ok");
+    let (mut client, session) = Client::opened(&catalog_path);
+    client.send(&json!({
+        "server_protocol_version": 1, "request_id": "q1", "session_id": session,
+        "operation": "query", "database": "work",
+        "statement": "MATCH (n) RETURN count(n) AS total",
+    }));
+    assert_eq!(client.receive()["outcome"], "ok");
+    client.finish();
+}

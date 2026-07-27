@@ -16,7 +16,9 @@
 
 use std::collections::BTreeSet;
 use std::io::{Read, Write};
+use std::time::Duration;
 
+use nostdb_core::cancel::Deadline;
 use nostdb_core::cypher;
 use nostdb_core::execute::Parameters;
 use nostdb_core::result::ResultEnvelope;
@@ -30,16 +32,18 @@ use crate::session::{OpenError, Slot};
 
 /// The limits section 7 requires a build to enforce and make configurable.
 ///
-/// `query_timeout` is deliberately absent. Section 7 requires one and the Engine exposes no
-/// cancellation, so a timeout here could only be measured after a query had already finished,
-/// which would report a limit that stopped nothing. The gap is recorded in the root progress file
-/// rather than papered over with a field that does not work.
+/// `query_timeout` is enforced through the Engine's cooperative cancellation, which observes it at
+/// part, clause, and match-row boundaries. `nostdb_core::cancel` states that granularity, and the
+/// query subset contract's section 11.1 forbids claiming more of it than an implementation has: a
+/// single Engine operation that does not yield between those boundaries runs to completion.
 #[derive(Debug, Clone, Copy)]
 pub struct Limits {
     /// The largest frame this build accepts. At least [`frame::MINIMUM_MAXIMUM_FRAME_BYTES`].
     pub max_frame_bytes: u32,
     /// The largest number of rows a response carries.
     pub max_result_rows: usize,
+    /// How long one query may run before it is asked to stop.
+    pub query_timeout: Duration,
 }
 
 impl Default for Limits {
@@ -47,6 +51,7 @@ impl Default for Limits {
         Self {
             max_frame_bytes: frame::MINIMUM_MAXIMUM_FRAME_BYTES,
             max_result_rows: 100_000,
+            query_timeout: Duration::from_secs(30),
         }
     }
 }
@@ -404,7 +409,11 @@ fn run_transaction_region<S: Read + Write>(
                 };
                 match cypher::parse(statement) {
                     Err(error) => diagnostic_response(version, &request, &error),
-                    Ok(query) => match transaction.run(&query, &Parameters::new()) {
+                    Ok(query) => match transaction.run_cancellable(
+                        &query,
+                        &Parameters::new(),
+                        &Deadline::after(limits.query_timeout),
+                    ) {
                         Err(error) => diagnostic_response(version, &request, &error),
                         Ok(result) => {
                             let writes = transaction.writes();
@@ -466,7 +475,11 @@ fn run_one(
     };
     let base = transaction.base_generation();
 
-    let result = match transaction.run(&query, &Parameters::new()) {
+    let result = match transaction.run_cancellable(
+        &query,
+        &Parameters::new(),
+        &Deadline::after(limits.query_timeout),
+    ) {
         Ok(result) => result,
         Err(error) => {
             transaction.rollback();
