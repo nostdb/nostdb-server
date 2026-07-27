@@ -543,6 +543,48 @@ mod tests {
     }
 
     #[test]
+    fn a_truncated_catalog_is_refused_rather_than_read_as_far_as_it_goes() {
+        // What an interrupted write from an older build, or a full disk, leaves behind. Section 5
+        // requires a reader that finds one to refuse it rather than treat the readable prefix as
+        // the catalog: half a catalog is a set of names somebody would then act on.
+        let path = temporary_directory("truncated").join("catalog.json");
+        std::fs::write(
+            &path,
+            b"{\"catalog_version\": 1, \"databases\": {\"work\": {\"pat",
+        )
+        .expect("wrote a truncated catalog");
+
+        let error = Catalog::load(&path).expect_err("refused");
+        match error {
+            super::Error::Rejected(rejection) => {
+                assert_eq!(rejection.code(), Code::CatalogInvalid);
+            }
+            other => panic!("expected a rejection, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_catalog_survives_a_write_that_replaces_it() {
+        // Recovery in the sense that matters here: the previous catalog is intact until the new one
+        // is complete, because a write is a rename over the target rather than an edit in place.
+        let path = temporary_directory("replace").join("catalog.json");
+        let mut first = Catalog::default();
+        first
+            .insert("work", Path::new("/srv/a.nostdb"))
+            .expect("one");
+        first.store(&path).expect("stored");
+
+        let mut second = Catalog::load(&path).expect("loaded");
+        second
+            .insert("spare", Path::new("/srv/b.nostdb"))
+            .expect("two");
+        second.store(&path).expect("stored again");
+
+        let reloaded = Catalog::load(&path).expect("reloaded");
+        assert_eq!(reloaded.names().collect::<Vec<_>>(), ["spare", "work"]);
+    }
+
+    #[test]
     fn an_unsupported_version_is_its_own_code() {
         let rejection =
             Catalog::parse(r#"{"catalog_version": 2, "databases": {}}"#).expect_err("refused");
