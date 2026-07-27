@@ -1,0 +1,36 @@
+# Independent verification for nostdb-server.
+#
+# The root contract requires every child repository to format, build, lint, and
+# test independently. scripts/verify-repository.sh runs the repository checks and the
+# ownership-boundary checks, and grows the full Rust command set with the crate, so a
+# local run and a CI run check exactly the same invariants.
+#
+# The toolchain comes from rust-toolchain.toml once the crate lands, rather than from the
+# runner image, so rustfmt and clippy are guaranteed present.
+#
+# Action dependency: actions/checkout, maintained by GitHub, MIT licensed, and
+# pinned to the exact commit of tag v7.0.1 rather than a floating major tag.
+
+name: verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Verify the repository
+        run: ./scripts/verify-repository.sh
