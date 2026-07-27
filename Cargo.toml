@@ -1,0 +1,47 @@
+[package]
+name = "nostdb-server"
+version = "0.1.0"
+edition = "2024"
+# 1.89 rather than the 1.85 the sibling crates declare, for std file locking. See the
+# dependency review below: the alternative was a third-party lock crate or `unsafe` calls
+# into `flock`, and the one-instance lock is the reason this crate needs either.
+rust-version = "1.89"
+license = "SSPL-1.0"
+description = "NostDB per-user local daemon: named database catalog, local IPC, sessions, and recovery. Source-available under SSPL-1.0."
+publish = false
+
+[lib]
+name = "nostdb_server"
+path = "src/lib.rs"
+
+[[bin]]
+name = "nostdb-server"
+path = "src/main.rs"
+
+[lints.rust]
+missing_docs = "deny"
+
+[lints.clippy]
+missing_errors_doc = "deny"
+missing_panics_doc = "deny"
+
+# Dependency review:
+#
+# serde_json  Purpose: reading and writing the catalog document. `catalog_version` 1 is a JSON
+#             document, and its preservation rule requires round-tripping a member this build
+#             does not understand, which needs a real JSON value rather than a struct that
+#             would silently drop unknown keys.
+#             Maintenance: active, serde-rs/json.
+#             License: MIT OR Apache-2.0.
+#
+# No file-locking dependency, and no `unsafe`. `std::fs::File::try_lock` has been stable since
+# Rust 1.89, and an advisory lock held by a process is released by the operating system when
+# that process dies, which is exactly the stale-lock reclaim the protocol contract requires in
+# section 2.1. The alternatives were a third-party crate wrapping `flock` or `unsafe` calls
+# into libc, and the second would have needed an ADR under the root contract.
+#
+# No nostdb-core dependency yet. The catalog, the lock, and the endpoint need nothing from the
+# Engine: a catalog entry is a path this crate never opens. The Engine arrives with sessions,
+# which is where a database is actually read.
+[dependencies]
+serde_json = "1"

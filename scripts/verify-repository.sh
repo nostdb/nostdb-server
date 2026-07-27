@@ -2,15 +2,8 @@
 
 # Non-mutating verification for nostdb-server.
 #
-# This increment connects repository scaffolding only, so the checks below cover
-# scaffolding plus the boundaries that must hold before any code exists. Later Stage 8
-# increments add the crate and extend this script with the Rust command set, exactly as
-# the nostdb-core and nostdb-cli verifiers grew:
-#
-#   cargo fmt --check
-#   cargo check
-#   cargo clippy --all-targets --all-features -- -D warnings
-#   cargo test --all-targets --all-features
+# Covers the repository shape, the ownership boundaries in AGENTS.md, the local-only transport
+# invariant, the library's stdout boundary, and the Rust command set.
 
 set -eu
 
@@ -27,6 +20,11 @@ LICENSE
 .gitignore
 .editorconfig
 .github/workflows/verify.yml
+Cargo.toml
+Cargo.lock
+rust-toolchain.toml
+src/lib.rs
+src/main.rs
 "
 
 for required_file in $required_files; do
@@ -43,6 +41,8 @@ README.md
 .gitignore
 .editorconfig
 .github/workflows/verify.yml
+Cargo.toml
+rust-toolchain.toml
 scripts/verify-repository.sh
 "
 
@@ -91,6 +91,24 @@ if [ -f Cargo.toml ] && grep -nE '^(axum|actix-web|warp|hyper|rocket|tide|tonic)
   exit 1
 fi
 
+# AGENTS.md requires the library to use log records rather than writing diagnostics to stdout.
+# The binary legitimately prints: it is a command, and reporting the endpoint it bound is its
+# output. The library is what must stay quiet, because a caller parsing the binary's stdout must
+# not have library chatter interleaved into it.
+#
+# main.rs is excluded by name rather than by directory, so a second binary added later is
+# excluded deliberately instead of by accident.
+if [ -d src ]; then
+  noisy=$(
+    find src -name '*.rs' ! -name 'main.rs' -exec grep -nE '\b(println!|print!)' {} + || true
+  )
+  if [ -n "$noisy" ]; then
+    echo "the library must not write to stdout; use a log record instead" >&2
+    printf '%s\n' "$noisy" >&2
+    exit 1
+  fi
+fi
+
 # The daemon coordinates access to databases the Engine owns. A parser, storage engine, or
 # query engine here would be a second implementation of behavior the product contract
 # defines once, and only nostdb-core writes .nostdb.
@@ -108,7 +126,11 @@ fi
 # reproducible build and forbids following a floating branch, and a `branch =` or `tag =`
 # dependency would do exactly that. A path dependency would break this repository's
 # promise to build without its siblings, which is what CI checks out.
-if [ -f Cargo.toml ] && grep -q 'nostdb-core' Cargo.toml; then
+#
+# The trigger is a dependency *declaration*, not any mention of the name. Matching any mention
+# fired on this manifest's own dependency review, which explains in prose why the Engine is not
+# depended on yet, and a check that a comment can fail is a check people learn to work around.
+if [ -f Cargo.toml ] && grep -qE '^[[:space:]]*nostdb-core[[:space:]]*=' Cargo.toml; then
   if ! grep -qE '^nostdb-core = \{ git = "https://github.com/nostdb/nostdb-core\.git", rev = "[0-9a-f]{40}" \}$' Cargo.toml; then
     echo "nostdb-core must be pinned to an exact 40-character commit over https" >&2
     exit 1
