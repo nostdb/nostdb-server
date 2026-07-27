@@ -46,6 +46,11 @@ pub enum Rule {
     DatabaseIsAPath,
     /// A request named a session that does not exist.
     UnknownSession,
+    /// A second `open_session` arrived on a connection that already has one.
+    ///
+    /// Section 6.1: a connection carries one session. Opening another would silently widen the
+    /// connection, and replacing the first would discard a session the client still believes in.
+    SecondSessionOnOneConnection,
     /// The peer belongs to another operating-system user.
     PeerIsAnotherUser,
 }
@@ -65,6 +70,7 @@ impl Rule {
             Self::UnknownOperation => "unknown_operation",
             Self::DatabaseIsAPath => "database_is_a_path",
             Self::UnknownSession => "unknown_session",
+            Self::SecondSessionOnOneConnection => "second_session_on_one_connection",
             Self::PeerIsAnotherUser => "peer_is_another_user",
         }
     }
@@ -111,6 +117,17 @@ impl Refusal {
     #[must_use]
     pub fn detail(&self) -> &str {
         &self.detail
+    }
+
+    /// Builds a refusal for a rule this module cannot decide on its own.
+    ///
+    /// Three of the section 8 rows depend on state a message does not carry: whether a session
+    /// exists, whether the connection already has one, and which user the peer is. The modules
+    /// that hold that state raise those, and this is how they do it without a second refusal type
+    /// that a caller would have to match on separately.
+    #[must_use]
+    pub fn of(rule: Rule, detail: impl Into<String>) -> Self {
+        Self::new(rule, detail)
     }
 
     fn new(rule: Rule, detail: impl Into<String>) -> Self {
@@ -495,6 +512,7 @@ mod tests {
             Rule::UnknownOperation,
             Rule::DatabaseIsAPath,
             Rule::UnknownSession,
+            Rule::SecondSessionOnOneConnection,
             Rule::PeerIsAnotherUser,
         ] {
             assert_eq!(rule.code(), None, "{rule} must carry no code");

@@ -54,7 +54,11 @@ fn rules_proven_elsewhere() -> BTreeMap<&'static str, &'static str> {
     BTreeMap::from([
         (
             "unknown_session",
-            "needs a session registry, which arrives with sessions",
+            "decided against a connection's session, not a document; proven in the session tests",
+        ),
+        (
+            "second_session_on_one_connection",
+            "decided against a connection's session, not a document; proven in the session tests",
         ),
         (
             "peer_is_another_user",

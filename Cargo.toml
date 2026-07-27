@@ -40,8 +40,17 @@ missing_panics_doc = "deny"
 # section 2.1. The alternatives were a third-party crate wrapping `flock` or `unsafe` calls
 # into libc, and the second would have needed an ADR under the root contract.
 #
-# No nostdb-core dependency yet. The catalog, the lock, and the endpoint need nothing from the
-# Engine: a catalog entry is a path this crate never opens. The Engine arrives with sessions,
-# which is where a database is actually read.
+# nostdb-core  Purpose: the Engine. A session opens a database and runs a statement by calling
+#              it, because only the Engine writes `.nostdb` and no daemon may hold a second
+#              parser, storage engine, or query engine. Increments 2 and 3 needed none of it: a
+#              catalog entry is a path this crate never opened, and framing carries bytes. A
+#              session is where a database is actually read, so this is where it arrives.
+#              Pinned to an exact commit rather than a branch, because docs/REPOSITORIES.md
+#              requires a reproducible build and forbids a floating dependency. A path dependency
+#              was rejected: this repository must build on its own, and CI checks it out without
+#              its siblings.
+#              Maintenance: this workspace.
+#              License: SSPL-1.0.
 [dependencies]
 serde_json = "1"
+nostdb-core = { git = "https://github.com/nostdb/nostdb-core.git", rev = "96011ce801425705c6743da10f6fdb052722029a" }

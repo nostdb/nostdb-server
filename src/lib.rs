@@ -25,6 +25,7 @@ pub mod endpoint;
 pub mod frame;
 pub mod lock;
 pub mod message;
+pub mod session;
 
 use std::io;
 use std::path::PathBuf;
