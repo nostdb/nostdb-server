@@ -1,6 +1,6 @@
 [package]
 name = "nostdb-server"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2024"
 # 1.89 rather than the 1.85 the sibling crates declare, for std file locking. See the
 # dependency review below: the alternative was a third-party lock crate or `unsafe` calls
