@@ -1,6 +1,6 @@
 [package]
 name = "nostdb-server"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2024"
 # 1.89 rather than the 1.85 the sibling crates declare, for std file locking. See the
 # dependency review below: the alternative was a third-party lock crate or `unsafe` calls
@@ -53,4 +53,4 @@ missing_panics_doc = "deny"
 #              License: SSPL-1.0.
 [dependencies]
 serde_json = "1"
-nostdb-core = { git = "https://github.com/nostdb/nostdb-core.git", rev = "997d4d8110fcc5573254e65962d7943cb4c673dc" }
+nostdb-core = { git = "https://github.com/nostdb/nostdb-core.git", rev = "7ee0238beee8b3da69a5127883330fb9936ea32e" }
