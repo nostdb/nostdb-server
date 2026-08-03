@@ -129,7 +129,7 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 [[package]]
 name = "nostdb-core"
 version = "0.1.6"
-source = "git+https://github.com/nostdb/nostdb-core.git?rev=9203c6b15c9677203813db96d8d50cebf0259cc3#9203c6b15c9677203813db96d8d50cebf0259cc3"
+source = "git+https://github.com/nostdb/nostdb-core.git?rev=ec575b71cc4398cc47286b2a6df03ab54082f357#ec575b71cc4398cc47286b2a6df03ab54082f357"
 dependencies = [
  "serde_json",
  "sha2",
